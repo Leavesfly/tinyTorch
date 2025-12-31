@@ -257,7 +257,7 @@ trainer.train()
 ### 已实现的示例
 
 | 示例 | 描述 | 代码行数 |
-|------|------|---------||
+|------|------|---------|
 | [CNN 图像分类](examples/cnn/mnist_classifier.py) | 使用 Conv2d 实现图像分类器 | 257 |
 | [LSTM 语言模型](examples/nlp/language_model.py) | 使用 LSTM 进行序列建模 | 270 |
 | [Transformer 注意力](examples/transformer/simple_transformer.py) | MultiHeadAttention 实现 | 299 |
