@@ -18,7 +18,7 @@
 
 ## 📖 项目简介
 
-tinyTorch 是一个完全使用 Python 标准库实现的深度学习框架，不依赖任何第三方库（如 NumPy、PyTorch）。它参考了 [tinyai-deeplearning](../tinyai-deeplearning) 项目的架构设计，提供了从张量运算到模型训练的完整功能链路。
+tinyTorch 是一个完全使用 Python 标准库实现的深度学习框架，不依赖任何第三方库（如 NumPy、PyTorch）。它参考了 [tinyai-deeplearning](https://github.com/Leavesfly/TinyAI/tree/main/tinyai-deeplearning) 项目的架构设计，提供了从张量运算到模型训练的完整功能链路。
 
 ### 为什么选择 tinyTorch？
 
