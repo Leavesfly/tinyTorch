@@ -28,7 +28,6 @@ from tinytorch import tensor
 from tinytorch import autograd
 from tinytorch import nn
 from tinytorch import ml
-from tinytorch import utils
 
 # Import commonly used classes for convenience
 from tinytorch.tensor import Tensor, Shape
@@ -39,7 +38,6 @@ __all__ = [
     'autograd',
     'nn',
     'ml',
-    'utils',
     '__version__',
     '__author__',
     'Tensor',
