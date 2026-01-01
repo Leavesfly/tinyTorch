@@ -57,5 +57,101 @@ class TestNormalization:
         assert dropout.p == 0.5
 
 
+class TestConvolution:
+    """卷积层的测试。"""
+    
+    def test_conv2d_creation(self):
+        """测试卷积层创建。"""
+        try:
+            from tinytorch.nn.layers import Conv2d
+            conv = Conv2d(in_channels=3, out_channels=16, kernel_size=3)
+            assert conv.in_channels == 3
+            assert conv.out_channels == 16
+        except ImportError:
+            pytest.skip("Conv2d 暂未实现")
+
+
+class TestEmbedding:
+    """嵌入层的测试。"""
+    
+    def test_embedding_creation(self):
+        """测试嵌入层创建。"""
+        try:
+            from tinytorch.nn.layers import Embedding
+            emb = Embedding(num_embeddings=1000, embedding_dim=128)
+            assert emb.num_embeddings == 1000
+            assert emb.embedding_dim == 128
+        except ImportError:
+            pytest.skip("Embedding 暂未实现")
+
+
+class TestAttention:
+    """注意力层的测试。"""
+    
+    def test_attention_creation(self):
+        """测试注意力层创建。"""
+        try:
+            from tinytorch.nn.layers import MultiHeadAttention
+            attn = MultiHeadAttention(embed_dim=512, num_heads=8)
+            assert attn.embed_dim == 512
+            assert attn.num_heads == 8
+        except ImportError:
+            pytest.skip("MultiHeadAttention 暂未实现")
+
+
+class TestModule:
+    """模块基类的测试。"""
+    
+    def test_module_parameters(self):
+        """测试获取模块参数。"""
+        layer = Linear(10, 5)
+        params = list(layer.parameters())
+        assert len(params) > 0
+        
+    def test_module_train_mode(self):
+        """测试训练模式。"""
+        layer = Linear(10, 5)
+        layer.train()
+        assert layer.training == True
+        
+    def test_module_eval_mode(self):
+        """测试评估模式。"""
+        layer = Linear(10, 5)
+        layer.eval()
+        assert layer.training == False
+
+
+class TestSequential:
+    """顺序容器的测试。"""
+    
+    def test_sequential_creation(self):
+        """测试顺序容器创建。"""
+        try:
+            from tinytorch.nn import Sequential
+            model = Sequential(
+                Linear(10, 20),
+                ReLU(),
+                Linear(20, 5)
+            )
+            assert len(model.layers) == 3
+        except ImportError:
+            pytest.skip("Sequential 暂未实现")
+        
+    def test_sequential_forward(self):
+        """测试顺序容器前向传播。"""
+        try:
+            from tinytorch.nn import Sequential
+            model = Sequential(
+                Linear(3, 5),
+                ReLU(),
+                Linear(5, 2)
+            )
+            x = Variable(Tensor([[1.0, 2.0, 3.0]]))
+            output = model(x)
+            assert output.value.shape.dims[1] == 2
+        except ImportError:
+            pytest.skip("Sequential 暂未实现")
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
