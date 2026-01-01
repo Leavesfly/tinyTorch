@@ -1,7 +1,7 @@
-"""Function base class for automatic differentiation operations.
+"""自动微分操作的函数基类。
 
-This module provides the Function base class that all differentiable operations
-must inherit from. It defines the interface for forward and backward propagation.
+本模块提供了所有可微分操作必须继承的 Function 基类。
+它定义了前向传播和反向传播的接口。
 
 Author: TinyAI Team
 Version: 0.1.0
@@ -12,18 +12,17 @@ from tinytorch.tensor import Tensor
 
 
 class Function:
-    """Base class for all differentiable functions.
+    """所有可微分函数的基类。
     
-    Subclasses must implement forward() and backward() methods.
-    The Function maintains references to input variables and saved tensors
-    for backward propagation.
+    子类必须实现 forward() 和 backward() 方法。
+    Function 维护对输入变量和保存张量的引用，以便进行反向传播。
     
-    Attributes:
-        inputs: List of input Variable objects
-        outputs: List of output Variable objects
-        saved_tensors: List of tensors saved during forward pass
+    属性:
+        inputs: 输入 Variable 对象列表
+        outputs: 输出 Variable 对象列表
+        saved_tensors: 前向传播时保存的张量列表
     
-    Example:
+    示例:
         >>> class Add(Function):
         ...     def forward(self, x, y):
         ...         return x.add(y)
@@ -32,52 +31,52 @@ class Function:
     """
     
     def __init__(self):
-        """Initialize Function."""
+        """初始化 Function。"""
         self.inputs = []
         self.outputs = []
         self.saved_tensors = []
     
     def __call__(self, *inputs):
-        """Call the function (same as call method).
+        """调用函数（与 call 方法相同）。
         
-        Args:
-            *inputs: Variable inputs
+        参数:
+            *inputs: Variable 输入
             
-        Returns:
-            Output Variable(s)
+        返回:
+            输出 Variable
         """
         return self.call(*inputs)
     
     def call(self, *inputs):
-        """Execute forward propagation and build computation graph.
+        """执行前向传播并构建计算图。
         
-        This method:
-        1. Extracts tensor values from input Variables
-        2. Calls forward() to compute output tensors
-        3. Wraps output tensors in Variables
-        4. Sets up backward graph connections
+        此方法:
+        1. 从输入 Variables 中提取张量值
+        2. 调用 forward() 计算输出张量
+        3. 将输出张量包装成 Variables
+        4. 设置反向传播图连接
         
-        Args:
-            *inputs: Variable inputs
+        参数:
+            *inputs: Variable 输入
             
-        Returns:
-            Output Variable (or tuple of Variables for multi-output)
+        返回:
+            输出 Variable（或多输出的 Variables 元组）
         """
-        # Import here to avoid circular dependency
+        # 在此处导入以避免循环依赖
         from tinytorch.autograd.variable import Variable
         
-        # Store input variables
+        # 存储输入变量
         self.inputs = list(inputs)
         
-        # Extract tensor values
+        # 提取张量值
         input_tensors = [var.value for var in inputs]
         
-        # Forward propagation
+        # 前向传播
         output_tensors = self.forward(*input_tensors)
         
-        # Handle single or multiple outputs
+        # 处理单输出或多输出
         if isinstance(output_tensors, (list, tuple)):
-            # Multiple outputs
+            # 多输出
             output_vars = []
             for tensor in output_tensors:
                 var = Variable(tensor)
@@ -86,57 +85,56 @@ class Function:
             self.outputs = output_vars
             return tuple(output_vars)
         else:
-            # Single output
+            # 单输出
             output_var = Variable(output_tensors)
             output_var.creator = self
             self.outputs = [output_var]
             return output_var
     
     def forward(self, *inputs: Tensor) -> Tensor:
-        """Forward propagation computation.
+        """前向传播计算。
         
-        Subclasses must implement this method to define the forward computation.
+        子类必须实现此方法以定义前向计算。
         
-        Args:
-            *inputs: Input tensors
+        参数:
+            *inputs: 输入张量
             
-        Returns:
-            Output tensor(s)
+        返回:
+            输出张量
             
-        Raises:
-            NotImplementedError: If not implemented by subclass
+        异常:
+            NotImplementedError: 如果子类未实现此方法
         """
         raise NotImplementedError(f"{self.__class__.__name__} must implement forward()")
     
     def backward(self, grad_output: Tensor) -> List[Tensor]:
-        """Backward propagation computation.
+        """反向传播计算。
         
-        Subclasses must implement this method to compute input gradients
-        given the output gradient.
+        子类必须实现此方法，根据输出梯度计算输入梯度。
         
-        Args:
-            grad_output: Gradient of loss with respect to output
+        参数:
+            grad_output: 损失对输出的梯度
             
-        Returns:
-            List of gradients with respect to each input
+        返回:
+            每个输入的梯度列表
             
-        Raises:
-            NotImplementedError: If not implemented by subclass
+        异常:
+            NotImplementedError: 如果子类未实现此方法
         """
         raise NotImplementedError(f"{self.__class__.__name__} must implement backward()")
     
     def save_for_backward(self, *tensors: Tensor):
-        """Save tensors needed for backward computation.
+        """保存反向计算所需的张量。
         
-        Args:
-            *tensors: Tensors to save
+        参数:
+            *tensors: 要保存的张量
         """
         self.saved_tensors = list(tensors)
     
     def get_saved_tensors(self) -> Tuple[Tensor, ...]:
-        """Retrieve saved tensors.
+        """获取保存的张量。
         
-        Returns:
-            Tuple of saved tensors
+        返回:
+            保存的张量元组
         """
         return tuple(self.saved_tensors)
