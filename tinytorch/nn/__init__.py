@@ -1,10 +1,10 @@
-"""Neural network module - Building blocks for neural networks.
+"""神经网络模块 - 神经网络的构建块。
 
-This module provides layers, modules, and utilities for building neural networks.
+该模块提供构建神经网络所需的层、模块和工具。
 
-Classes:
-    Module: Base class for all neural network modules
-    Parameter: Trainable parameter class
+类：
+    Module: 所有神经网络模块的基类
+    Parameter: 可训练参数类
 """
 
 from tinytorch.nn.module import Module

@@ -7,6 +7,7 @@ import math
 from tinytorch.ml.losses.loss import Loss
 from tinytorch.autograd import Variable
 from tinytorch.tensor import Tensor
+from tinytorch.tensor.shape import Shape
 
 
 class CrossEntropyLoss(Loss):
@@ -80,7 +81,7 @@ class CrossEntropyLoss(Loss):
             target_class = int(target.value.data[b])
             
             # 计算负对数似然
-            # loss = -log(softmax_probs[target_class])
+            # 计算负对数似然：loss = -log(softmax_probs[target_class])
             prob = softmax_probs[target_class]
             if prob <= 0:
                 prob = 1e-10  # 防止 log(0)
@@ -95,10 +96,10 @@ class CrossEntropyLoss(Loss):
             total_loss = sum(losses)
         else:  # 'none'
             # 返回每个样本的损失
-            return Variable(Tensor(losses, input.value.shape[:1], 'float32'), requires_grad=True)
+            return Variable(Tensor(losses, Shape((len(losses),)), 'float32'), requires_grad=True)
         
         # 返回标量损失
-        loss_tensor = Tensor([total_loss], (1,), 'float32')
+        loss_tensor = Tensor([total_loss], Shape((1,)), 'float32')
         return Variable(loss_tensor, requires_grad=True)
     
     def __repr__(self) -> str:
@@ -168,7 +169,7 @@ class BCELoss(Loss):
             # 限制概率范围
             pred = max(epsilon, min(1.0 - epsilon, pred))
             
-            # BCE: -[target * log(pred) + (1 - target) * log(1 - pred)]
+            # 二元交叉熵：BCE = -[target * log(pred) + (1 - target) * log(1 - pred)]
             loss = -(tgt * math.log(pred) + (1.0 - tgt) * math.log(1.0 - pred))
             losses.append(loss)
         

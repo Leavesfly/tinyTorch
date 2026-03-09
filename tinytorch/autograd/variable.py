@@ -237,6 +237,16 @@ class Variable:
         return self.value.shape
     
     @property
+    def data(self) -> list:
+        """获取张量的数据列表（局平）。"""
+        return self.value.data
+    
+    @data.setter
+    def data(self, value: list):
+        """设置张量的数据列表。"""
+        self.value.data = value
+    
+    @property
     def ndim(self) -> int:
         """获取维数。"""
         return self.value.shape.ndim

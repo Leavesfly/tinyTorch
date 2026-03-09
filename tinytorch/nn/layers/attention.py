@@ -201,10 +201,10 @@ class MultiHeadAttention(Module):
         scores_tensor = Tensor(scores_data, scores_shape, 'float32')
         scores = Variable(scores_tensor, requires_grad=Q.requires_grad)
         
-        # Softmax
+        # Softmax 操作
         attn_weights = self._softmax(scores, dim=-1)
         
-        # attn_weights @ V
+        # 注意力权重 @ V
         output_data = []
         for b in range(batch_size):
             for h in range(num_heads):

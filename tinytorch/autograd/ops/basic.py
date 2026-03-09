@@ -1,9 +1,9 @@
-"""Basic arithmetic operations with automatic differentiation.
+"""带自动微分的基本算术运算。
 
-This module implements basic arithmetic operations: Add, Sub, Mul, Div, Neg.
+该模块实现了基本算术运算：Add（加）、Sub（减）、Mul（乘）、Div（除）、Neg（负）。
 
-Author: TinyAI Team
-Version: 0.1.0
+作者：TinyAI Team
+版本：0.1.0
 """
 
 from typing import List
@@ -12,21 +12,21 @@ from tinytorch.autograd.function import Function
 
 
 class Add(Function):
-    """Element-wise addition: z = x + y
+    """元素级加法：z = x + y
     
-    Forward: z = x + y
-    Backward: dL/dx = dL/dz, dL/dy = dL/dz
+    前向传播：z = x + y
+    反向传播：dL/dx = dL/dz, dL/dy = dL/dz
     """
     
     def forward(self, x: Tensor, y: Tensor) -> Tensor:
-        """Forward pass for addition."""
+        """加法的前向传播。"""
         return x.add(y)
     
     def backward(self, grad_output: Tensor) -> List[Tensor]:
-        """Backward pass for addition.
+        """加法的反向传播。
         
-        Gradients flow equally to both inputs.
-        Handle broadcasting by summing over broadcast dimensions.
+        梯度均等地流向两个输入。
+        处理广播：对广播维度求和。
         """
         x_shape = self.inputs[0].value.shape
         y_shape = self.inputs[1].value.shape
@@ -34,7 +34,7 @@ class Add(Function):
         grad_x = grad_output
         grad_y = grad_output
         
-        # Handle broadcasting: sum over broadcast dimensions
+        # 处理广播：对广播维度求和
         if grad_x.shape != x_shape:
             grad_x = self._sum_to_shape(grad_x, x_shape)
         
@@ -45,13 +45,13 @@ class Add(Function):
     
     @staticmethod
     def _sum_to_shape(tensor: Tensor, target_shape) -> Tensor:
-        """Sum tensor to target shape (handle broadcasting in backward)."""
-        # Sum over extra dimensions
+        """将 tensor 求和到 target_shape（处理反向传播中的广播）。"""
+        # 对额外维度求和
         ndim_diff = tensor.shape.ndim - target_shape.ndim
         for _ in range(ndim_diff):
             tensor = tensor.sum(axis=0, keepdims=False)
         
-        # Sum over dimensions where target is 1
+        # 对目标为 1 的维度求和
         for i in range(target_shape.ndim):
             if target_shape[i] == 1 and tensor.shape[i] > 1:
                 tensor = tensor.sum(axis=i, keepdims=True)
@@ -60,25 +60,25 @@ class Add(Function):
 
 
 class Sub(Function):
-    """Element-wise subtraction: z = x - y
+    """元素级减法：z = x - y
     
-    Forward: z = x - y
-    Backward: dL/dx = dL/dz, dL/dy = -dL/dz
+    前向传播：z = x - y
+    反向传播：dL/dx = dL/dz, dL/dy = -dL/dz
     """
     
     def forward(self, x: Tensor, y: Tensor) -> Tensor:
-        """Forward pass for subtraction."""
+        """减法的前向传播。"""
         return x.sub(y)
     
     def backward(self, grad_output: Tensor) -> List[Tensor]:
-        """Backward pass for subtraction."""
+        """减法的反向传播。"""
         x_shape = self.inputs[0].value.shape
         y_shape = self.inputs[1].value.shape
         
         grad_x = grad_output
         grad_y = grad_output.neg()
         
-        # Handle broadcasting
+        # 处理广播
         if grad_x.shape != x_shape:
             grad_x = Add._sum_to_shape(grad_x, x_shape)
         
@@ -89,19 +89,19 @@ class Sub(Function):
 
 
 class Mul(Function):
-    """Element-wise multiplication: z = x * y
+    """元素级乘法：z = x * y
     
-    Forward: z = x * y
-    Backward: dL/dx = dL/dz * y, dL/dy = dL/dz * x
+    前向传播：z = x * y
+    反向传播：dL/dx = dL/dz * y, dL/dy = dL/dz * x
     """
     
     def forward(self, x: Tensor, y: Tensor) -> Tensor:
-        """Forward pass for multiplication."""
+        """乘法的前向传播。"""
         self.save_for_backward(x, y)
         return x.mul(y)
     
     def backward(self, grad_output: Tensor) -> List[Tensor]:
-        """Backward pass for multiplication."""
+        """乘法的反向传播。"""
         x, y = self.get_saved_tensors()
         x_shape = self.inputs[0].value.shape
         y_shape = self.inputs[1].value.shape
@@ -109,7 +109,7 @@ class Mul(Function):
         grad_x = grad_output.mul(y)
         grad_y = grad_output.mul(x)
         
-        # Handle broadcasting
+        # 处理广播
         if grad_x.shape != x_shape:
             grad_x = Add._sum_to_shape(grad_x, x_shape)
         
@@ -120,19 +120,19 @@ class Mul(Function):
 
 
 class Div(Function):
-    """Element-wise division: z = x / y
+    """元素级除法：z = x / y
     
-    Forward: z = x / y
-    Backward: dL/dx = dL/dz / y, dL/dy = -dL/dz * x / y^2
+    前向传播：z = x / y
+    反向传播：dL/dx = dL/dz / y, dL/dy = -dL/dz * x / y^2
     """
     
     def forward(self, x: Tensor, y: Tensor) -> Tensor:
-        """Forward pass for division."""
+        """除法的前向传播。"""
         self.save_for_backward(x, y)
         return x.div(y)
     
     def backward(self, grad_output: Tensor) -> List[Tensor]:
-        """Backward pass for division."""
+        """除法的反向传播。"""
         x, y = self.get_saved_tensors()
         x_shape = self.inputs[0].value.shape
         y_shape = self.inputs[1].value.shape
@@ -140,7 +140,7 @@ class Div(Function):
         grad_x = grad_output.div(y)
         grad_y = grad_output.neg().mul(x).div(y.pow(2))
         
-        # Handle broadcasting
+        # 处理广播
         if grad_x.shape != x_shape:
             grad_x = Add._sum_to_shape(grad_x, x_shape)
         
@@ -151,16 +151,16 @@ class Div(Function):
 
 
 class Neg(Function):
-    """Negation: y = -x
+    """取负运算：y = -x
     
-    Forward: y = -x
-    Backward: dL/dx = -dL/dy
+    前向传播：y = -x
+    反向传播：dL/dx = -dL/dy
     """
     
     def forward(self, x: Tensor) -> Tensor:
-        """Forward pass for negation."""
+        """取负的前向传播。"""
         return x.neg()
     
     def backward(self, grad_output: Tensor) -> List[Tensor]:
-        """Backward pass for negation."""
+        """取负的逆向传播。"""
         return [grad_output.neg()]

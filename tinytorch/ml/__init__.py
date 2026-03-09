@@ -1,11 +1,11 @@
-"""Machine learning module - Training and evaluation framework.
+"""机器学习模块 - 训练和评估框架。
 
-This module provides complete model training, evaluation, and management functionality.
+该模块提供完整的模型训练、评估和管理功能。
 
-Classes:
-    Model: Model lifecycle management
-    Trainer: Training loop controller
-    DataSet: Dataset abstraction and batching
+类：
+    Model: 模型生命周期管理
+    Trainer: 训练循环控制器
+    DataSet: 数据集抽象和批处理
 """
 
 from tinytorch.ml.model import Model

@@ -1,9 +1,9 @@
-"""Matrix and tensor transformation operations with automatic differentiation.
+"""带自动微分的矩阵和张量变换运算。
 
-This module implements matrix operations: MatMul, Transpose, Reshape.
+该模块实现了矩阵运算：MatMul（矩阵乘法）、Transpose（转置）、Reshape（重塑）。
 
-Author: TinyAI Team
-Version: 0.1.0
+作者：TinyAI Team
+版本：0.1.0
 """
 
 from typing import List, Tuple, Union
@@ -12,19 +12,19 @@ from tinytorch.autograd.function import Function
 
 
 class MatMul(Function):
-    """Matrix multiplication: C = A @ B
+    """矩阵乘法：C = A @ B
     
-    Forward: C = A @ B
-    Backward: dL/dA = dL/dC @ B^T, dL/dB = A^T @ dL/dC
+    前向传播：C = A @ B
+    反向传播：dL/dA = dL/dC @ B^T, dL/dB = A^T @ dL/dC
     """
     
     def forward(self, a: Tensor, b: Tensor) -> Tensor:
-        """Forward pass for matrix multiplication."""
+        """矩阵乘法的前向传播。"""
         self.save_for_backward(a, b)
         return a.matmul(b)
     
     def backward(self, grad_output: Tensor) -> List[Tensor]:
-        """Backward pass for matrix multiplication."""
+        """矩阵乘法的反向传播。"""
         a, b = self.get_saved_tensors()
         
         # dL/dA = dL/dC @ B^T
@@ -37,32 +37,32 @@ class MatMul(Function):
 
 
 class Transpose(Function):
-    """Transpose operation: B = A^T
+    """转置运算：B = A^T
     
-    Forward: B = transpose(A, axes)
-    Backward: dL/dA = transpose(dL/dB, reverse_axes)
+    前向传播：B = transpose(A, axes)
+    反向传播：dL/dA = transpose(dL/dB, reverse_axes)
     """
     
     def __init__(self, axes: Tuple[int, ...] = None):
-        """Initialize transpose operation.
+        """初始化转置运算。
         
         Args:
-            axes: Permutation of dimensions (None for default reverse)
+            axes: 维度排列（None 表示默认反转）
         """
         super().__init__()
         self.axes = axes
     
     def forward(self, x: Tensor) -> Tensor:
-        """Forward pass for transpose."""
+        """转置的前向传播。"""
         return x.transpose(self.axes)
     
     def backward(self, grad_output: Tensor) -> List[Tensor]:
-        """Backward pass for transpose."""
+        """转置的反向传播。"""
         if self.axes is None:
-            # Default transpose: reverse all dimensions
+            # 默认转置：反转所有维度
             grad_x = grad_output.transpose()
         else:
-            # Invert the permutation
+            # 逆排列
             inv_axes = [0] * len(self.axes)
             for i, ax in enumerate(self.axes):
                 inv_axes[ax] = i
@@ -72,26 +72,26 @@ class Transpose(Function):
 
 
 class Reshape(Function):
-    """Reshape operation: y = reshape(x, new_shape)
+    """重塑运算：y = reshape(x, new_shape)
     
-    Forward: y = reshape(x, new_shape)
-    Backward: dL/dx = reshape(dL/dy, old_shape)
+    前向传播：y = reshape(x, new_shape)
+    反向传播：dL/dx = reshape(dL/dy, old_shape)
     """
     
     def __init__(self, new_shape: Union[Tuple[int, ...], List[int]]):
-        """Initialize reshape operation.
+        """初始化重塑运算。
         
         Args:
-            new_shape: Target shape
+            new_shape: 目标形状
         """
         super().__init__()
         self.new_shape = new_shape
     
     def forward(self, x: Tensor) -> Tensor:
-        """Forward pass for reshape."""
+        """重塑的前向传播。"""
         self.old_shape = x.shape
         return x.reshape(self.new_shape)
     
     def backward(self, grad_output: Tensor) -> List[Tensor]:
-        """Backward pass for reshape."""
+        """重塑的反向传播。"""
         return [grad_output.reshape(self.old_shape.dims)]

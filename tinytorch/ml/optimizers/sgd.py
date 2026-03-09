@@ -36,15 +36,18 @@ class SGD(Optimizer):
     """
     
     def __init__(self, params: List[Parameter], learning_rate: float = 0.01,
-                 momentum: float = 0.0, weight_decay: float = 0.0):
+                 momentum: float = 0.0, weight_decay: float = 0.0, **kwargs):
         """初始化 SGD 优化器。
         
         Args:
             params: 要优化的参数列表
-            learning_rate: 学习率
+            learning_rate: 学习率（也可用 lr 关键字）
             momentum: 动量系数（0-1之间）
             weight_decay: 权重衰减系数（L2 正则化）
         """
+        # 支持 lr 作为 learning_rate 的别名
+        if 'lr' in kwargs:
+            learning_rate = kwargs.pop('lr')
         super().__init__(params, learning_rate)
         self.momentum = momentum
         self.weight_decay = weight_decay
@@ -65,7 +68,7 @@ class SGD(Optimizer):
             
             # 添加权重衰减（L2 正则化）
             if self.weight_decay > 0:
-                # grad = grad + weight_decay * param
+                # 添加权重衰减：grad = grad + weight_decay * param
                 for j in range(len(grad.data)):
                     grad.data[j] += self.weight_decay * param.value.data[j]
             
@@ -78,11 +81,11 @@ class SGD(Optimizer):
                 
                 velocity = self.state[i]['velocity']
                 
-                # velocity = momentum * velocity + grad
+                # 更新速度：velocity = momentum * velocity + grad
                 for j in range(len(velocity.data)):
                     velocity.data[j] = self.momentum * velocity.data[j] + grad.data[j]
                 
-                # param = param - learning_rate * velocity
+                # 更新参数：param = param - learning_rate * velocity
                 for j in range(len(param.value.data)):
                     param.value.data[j] -= self.learning_rate * velocity.data[j]
             else:

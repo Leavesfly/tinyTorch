@@ -90,6 +90,11 @@ class Sequential(Module):
         """返回容器中的层数。"""
         return len(self._layers)
     
+    @property
+    def layers(self):
+        """获取层列表（_layers 的别名）。"""
+        return self._layers
+    
     def __getitem__(self, idx: int) -> Module:
         """通过索引获取层。
         

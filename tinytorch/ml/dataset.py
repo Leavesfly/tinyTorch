@@ -8,9 +8,10 @@ Author: TinyAI Team
 import random
 from typing import List, Tuple, Optional
 from tinytorch.tensor.tensor import Tensor
+from tinytorch.utils.data import Dataset
 
 
-class DataSet:
+class DataSet(Dataset):
     """数据集类。
     
     封装训练数据和标签，提供批处理、打乱等功能。

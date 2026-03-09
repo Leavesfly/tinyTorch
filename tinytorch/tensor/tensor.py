@@ -45,18 +45,18 @@ class Tensor:
         
         self.dtype = dtype
         
-        # Handle scalar input
+        # 处理标量输入
         if isinstance(data, (int, float)):
             self.data = [float(data) if dtype == 'float32' else int(data)]
             self.shape = Shape((1,)) if shape is None else shape
             return
         
-        # Handle nested list input
+        # 处理嵌套列表输入
         if isinstance(data, list) and data and isinstance(data[0], list):
             self.shape, self.data = self._from_nested_list(data, dtype)
             return
         
-        # Handle flat list input
+        # 处理扁平列表输入
         if isinstance(data, list):
             if shape is None:
                 self.shape = Shape((len(data),))
@@ -467,6 +467,98 @@ class Tensor:
         
         result_data = [x / count for x in sum_tensor.data]
         return Tensor(result_data, sum_tensor.shape, self.dtype)
+    
+    def max(self, axis: int = None, keepdims: bool = False) -> 'Tensor':
+        """求张量元素的最大值。
+        
+        Args:
+            axis: 沿哪个轴求最大值（None 表示所有）
+            keepdims: 是否保持被缩减的维度
+            
+        Returns:
+            最大值结果
+        """
+        if axis is None:
+            result = max(self.data)
+            if keepdims:
+                new_shape = Shape((1,) * self.shape.ndim)
+            else:
+                new_shape = Shape((1,))
+            return Tensor([result], new_shape, self.dtype)
+        
+        if axis < 0:
+            axis = self.shape.ndim + axis
+        if axis < 0 or axis >= self.shape.ndim:
+            raise ValueError(f"axis {axis} out of range for {self.shape.ndim}D tensor")
+        
+        new_dims = list(self.shape.dims)
+        if keepdims:
+            new_dims[axis] = 1
+        else:
+            new_dims.pop(axis)
+        if not new_dims:
+            new_dims = [1]
+        new_shape = Shape(tuple(new_dims))
+        
+        result_data = [float('-inf')] * new_shape.size
+        for i in range(self.shape.size):
+            old_indices = self._linear_to_indices(i, self.shape)
+            new_indices = list(old_indices)
+            if keepdims:
+                new_indices[axis] = 0
+            else:
+                new_indices.pop(axis)
+            new_idx = new_shape.linear_index(tuple(new_indices))
+            if self.data[i] > result_data[new_idx]:
+                result_data[new_idx] = self.data[i]
+        
+        return Tensor(result_data, new_shape, self.dtype)
+    
+    def min(self, axis: int = None, keepdims: bool = False) -> 'Tensor':
+        """求张量元素的最小值。
+        
+        Args:
+            axis: 沿哪个轴求最小值（None 表示所有）
+            keepdims: 是否保持被缩减的维度
+            
+        Returns:
+            最小值结果
+        """
+        if axis is None:
+            result = min(self.data)
+            if keepdims:
+                new_shape = Shape((1,) * self.shape.ndim)
+            else:
+                new_shape = Shape((1,))
+            return Tensor([result], new_shape, self.dtype)
+        
+        if axis < 0:
+            axis = self.shape.ndim + axis
+        if axis < 0 or axis >= self.shape.ndim:
+            raise ValueError(f"axis {axis} out of range for {self.shape.ndim}D tensor")
+        
+        new_dims = list(self.shape.dims)
+        if keepdims:
+            new_dims[axis] = 1
+        else:
+            new_dims.pop(axis)
+        if not new_dims:
+            new_dims = [1]
+        new_shape = Shape(tuple(new_dims))
+        
+        result_data = [float('inf')] * new_shape.size
+        for i in range(self.shape.size):
+            old_indices = self._linear_to_indices(i, self.shape)
+            new_indices = list(old_indices)
+            if keepdims:
+                new_indices[axis] = 0
+            else:
+                new_indices.pop(axis)
+            new_idx = new_shape.linear_index(tuple(new_indices))
+            if self.data[i] < result_data[new_idx]:
+                result_data[new_idx] = self.data[i]
+        
+        return Tensor(result_data, new_shape, self.dtype)
     
     # ==================== 数学函数 ====================
     

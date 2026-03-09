@@ -1,9 +1,9 @@
-"""Activation function operations with automatic differentiation.
+"""带自动微分的激活函数运算。
 
-This module implements activation functions: ReLU, Sigmoid, Tanh.
+该模块实现了激活函数：ReLU、Sigmoid、Tanh。
 
-Author: TinyAI Team
-Version: 0.1.0
+作者：TinyAI Team
+版本：0.1.0
 """
 
 import math
@@ -13,22 +13,22 @@ from tinytorch.autograd.function import Function
 
 
 class ReLU(Function):
-    """ReLU activation: y = max(0, x)
+    """ReLU 激活函数：y = max(0, x)
     
-    Forward: y = max(0, x)
-    Backward: dL/dx = dL/dy * (x > 0)
+    前向传播：y = max(0, x)
+    反向传播：dL/dx = dL/dy * (x > 0)
     """
     
     def forward(self, x: Tensor) -> Tensor:
-        """Forward pass for ReLU."""
+        """ReLU 的前向传播。"""
         self.save_for_backward(x)
         return x.relu()
     
     def backward(self, grad_output: Tensor) -> List[Tensor]:
-        """Backward pass for ReLU."""
+        """ReLU 的反向传播。"""
         x, = self.get_saved_tensors()
         
-        # Gradient is 1 where x > 0, else 0
+        # 梯度在 x > 0 时为 1，否则为 0
         mask_data = [1.0 if val > 0 else 0.0 for val in x.data]
         mask = Tensor(mask_data, x.shape, x.dtype)
         
@@ -37,46 +37,46 @@ class ReLU(Function):
 
 
 class Sigmoid(Function):
-    """Sigmoid activation: y = 1 / (1 + exp(-x))
+    """Sigmoid 激活函数：y = 1 / (1 + exp(-x))
     
-    Forward: y = sigmoid(x)
-    Backward: dL/dx = dL/dy * y * (1 - y)
+    前向传播：y = sigmoid(x)
+    反向传播：dL/dx = dL/dy * y * (1 - y)
     """
     
     def forward(self, x: Tensor) -> Tensor:
-        """Forward pass for sigmoid."""
+        """Sigmoid 的前向传播。"""
         y = x.sigmoid()
         self.save_for_backward(y)
         return y
     
     def backward(self, grad_output: Tensor) -> List[Tensor]:
-        """Backward pass for sigmoid."""
+        """Sigmoid 的反向传播。"""
         y, = self.get_saved_tensors()
         
-        # dy/dx = y * (1 - y)
+        # dy/dx = y * (1 - y) 的梯度计算
         one = Tensor.ones(y.shape, y.dtype)
         grad_x = grad_output.mul(y).mul(one.sub(y))
         return [grad_x]
 
 
 class Tanh(Function):
-    """Tanh activation: y = tanh(x)
+    """Tanh 激活函数：y = tanh(x)
     
-    Forward: y = tanh(x)
-    Backward: dL/dx = dL/dy * (1 - y^2)
+    前向传播：y = tanh(x)
+    反向传播：dL/dx = dL/dy * (1 - y^2)
     """
     
     def forward(self, x: Tensor) -> Tensor:
-        """Forward pass for tanh."""
+        """Tanh 的前向传播。"""
         y = x.tanh()
         self.save_for_backward(y)
         return y
     
     def backward(self, grad_output: Tensor) -> List[Tensor]:
-        """Backward pass for tanh."""
+        """Tanh 的反向传播。"""
         y, = self.get_saved_tensors()
         
-        # dy/dx = 1 - y^2
+        # dy/dx = 1 - y^2 的梯度计算
         one = Tensor.ones(y.shape, y.dtype)
         grad_x = grad_output.mul(one.sub(y.pow(2)))
         return [grad_x]

@@ -223,7 +223,7 @@ class Shape:
             new_dims = tuple(inferred_dim if i == neg_idx else d 
                            for i, d in enumerate(new_dims))
         
-        # Verify size match
+        # 验证大小匹配
         new_size = 1
         for d in new_dims:
             if d <= 0:

@@ -24,16 +24,29 @@ class Optimizer:
         >>> optimizer.step()
     """
     
-    def __init__(self, params: List[Parameter], learning_rate: float = 0.01):
+    def __init__(self, params: List[Parameter], learning_rate: float = 0.01, **kwargs):
         """初始化优化器。
         
         Args:
             params: 要优化的参数列表
-            learning_rate: 学习率
+            learning_rate: 学习率（也可使用 lr 关键字参数）
         """
+        # 支持 lr 作为 learning_rate 的别名
+        if 'lr' in kwargs:
+            learning_rate = kwargs.pop('lr')
         self.params = params
         self.learning_rate = learning_rate
         self.state = {}  # 用于存储优化器状态（如动量）
+    
+    @property
+    def lr(self) -> float:
+        """获取学习率（learning_rate 的别名）。"""
+        return self.learning_rate
+    
+    @lr.setter
+    def lr(self, value: float):
+        """设置学习率。"""
+        self.learning_rate = value
     
     def step(self) -> None:
         """执行一步参数更新（抽象方法，子类必须实现）。

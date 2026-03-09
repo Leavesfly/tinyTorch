@@ -1,9 +1,9 @@
-"""Reduction operations with automatic differentiation.
+"""带自动微分的归约运算。
 
-This module implements reduction operations: Sum, Mean.
+该模块实现了归约运算：Sum（求和）、Mean（平均）。
 
-Author: TinyAI Team
-Version: 0.1.0
+作者：TinyAI Team
+版本：0.1.0
 """
 
 from typing import List, Optional
@@ -12,43 +12,43 @@ from tinytorch.autograd.function import Function
 
 
 class Sum(Function):
-    """Sum reduction: y = sum(x, axis, keepdims)
+    """求和归约：y = sum(x, axis, keepdims)
     
-    Forward: y = sum(x, axis, keepdims)
-    Backward: dL/dx = broadcast(dL/dy) to x.shape
+    前向传播：y = sum(x, axis, keepdims)
+    反向传播：dL/dx = broadcast(dL/dy) to x.shape
     """
     
     def __init__(self, axis: Optional[int] = None, keepdims: bool = False):
-        """Initialize sum reduction.
+        """初始化求和归约。
         
         Args:
-            axis: Axis to sum over (None for all)
-            keepdims: Whether to keep reduced dimensions
+            axis: 求和的轴（None 表示所有维度）
+            keepdims: 是否保留归约后的维度
         """
         super().__init__()
         self.axis = axis
         self.keepdims = keepdims
     
     def forward(self, x: Tensor) -> Tensor:
-        """Forward pass for sum."""
+        """求和的前向传播。"""
         self.input_shape = x.shape
         return x.sum(axis=self.axis, keepdims=self.keepdims)
     
     def backward(self, grad_output: Tensor) -> List[Tensor]:
-        """Backward pass for sum."""
-        # Broadcast gradient back to input shape
+        """求和的反向传播。"""
+        # 将梯度广播回输入形状
         if self.keepdims:
-            # Shape already matches after broadcasting
+            # 广播后形状已经匹配
             grad_x = grad_output._broadcast_to(self.input_shape)
         else:
-            # Need to add back the reduced dimension
+            # 需要重新添加归约的维度
             if self.axis is None:
-                # Summed over all dimensions
+                # 对所有维度求和
                 grad_x = Tensor([grad_output.data[0]] * self.input_shape.size, 
                               self.input_shape, grad_output.dtype)
             else:
-                # Summed over specific axis
-                # Expand dimension and broadcast
+                # 对特定轴求和
+                # 扩展维度并广播
                 new_shape_list = list(grad_output.shape.dims)
                 axis = self.axis if self.axis >= 0 else self.input_shape.ndim + self.axis
                 new_shape_list.insert(axis, 1)
@@ -59,28 +59,28 @@ class Sum(Function):
 
 
 class Mean(Function):
-    """Mean reduction: y = mean(x, axis, keepdims)
+    """平均归约：y = mean(x, axis, keepdims)
     
-    Forward: y = mean(x, axis, keepdims)
-    Backward: dL/dx = broadcast(dL/dy / count) to x.shape
+    前向传播：y = mean(x, axis, keepdims)
+    反向传播：dL/dx = broadcast(dL/dy / count) to x.shape
     """
     
     def __init__(self, axis: Optional[int] = None, keepdims: bool = False):
-        """Initialize mean reduction.
+        """初始化平均归约。
         
         Args:
-            axis: Axis to average over (None for all)
-            keepdims: Whether to keep reduced dimensions
+            axis: 求平均的轴（None 表示所有维度）
+            keepdims: 是否保留归约后的维度
         """
         super().__init__()
         self.axis = axis
         self.keepdims = keepdims
     
     def forward(self, x: Tensor) -> Tensor:
-        """Forward pass for mean."""
+        """平均的前向传播。"""
         self.input_shape = x.shape
         
-        # Compute count for backward
+        # 为反向传播计算计数
         if self.axis is None:
             self.count = x.shape.size
         else:
@@ -90,11 +90,11 @@ class Mean(Function):
         return x.mean(axis=self.axis, keepdims=self.keepdims)
     
     def backward(self, grad_output: Tensor) -> List[Tensor]:
-        """Backward pass for mean."""
-        # Divide gradient by count
+        """平均的反向传播。"""
+        # 梯度除以计数
         grad_output = grad_output.div(self.count)
         
-        # Broadcast gradient back to input shape (same as Sum)
+        # 将梯度广播回输入形状（与 Sum 相同）
         if self.keepdims:
             grad_x = grad_output._broadcast_to(self.input_shape)
         else:

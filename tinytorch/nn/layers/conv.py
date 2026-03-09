@@ -56,7 +56,8 @@ class Conv2d(Module):
         
         # 初始化权重：(out_channels, in_channels, kernel_size, kernel_size)
         weight_shape = (out_channels, in_channels, kernel_size, kernel_size)
-        weight_tensor = init.kaiming_uniform(weight_shape)
+        weight_tensor = Tensor.zeros(weight_shape)
+        init.kaiming_uniform_(weight_tensor)
         self.weight = Parameter(weight_tensor, name='weight')
         
         # 初始化偏置：(out_channels,)
