@@ -146,6 +146,32 @@ class DataSet(Dataset):
         
         return train_dataset, val_dataset
     
+    def __iter__(self):
+        """迭代数据集，产生批次数据。
+        
+        Yields:
+            (batch_data, batch_labels) 元组，其中 batch_data 是列表的列表
+        """
+        # 如果需要打乱，先打乱索引
+        if self.shuffle:
+            self.shuffle_data()
+        
+        num_samples = len(self.data)
+        num_batches = (num_samples + self.batch_size - 1) // self.batch_size
+        
+        for i in range(num_batches):
+            start_idx = i * self.batch_size
+            end_idx = min(start_idx + self.batch_size, num_samples)
+            
+            # 获取批次索引
+            batch_indices = self._indices[start_idx:end_idx]
+            
+            # 构建批次数据
+            batch_data = [self.data[idx] for idx in batch_indices]
+            batch_labels = [self.labels[idx] for idx in batch_indices]
+            
+            yield batch_data, batch_labels
+    
     def __repr__(self) -> str:
         """返回数据集的字符串表示。"""
         return (f"DataSet(num_samples={len(self.data)}, "

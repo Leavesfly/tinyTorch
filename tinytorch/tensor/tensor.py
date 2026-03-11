@@ -61,6 +61,9 @@ class Tensor:
             if shape is None:
                 self.shape = Shape((len(data),))
             else:
+                # 如果 shape 是 tuple，转换为 Shape 对象
+                if isinstance(shape, tuple):
+                    shape = Shape(shape)
                 self.shape = shape
                 if len(data) != shape.size:
                     raise ValueError(f"Data size {len(data)} doesn't match shape size {shape.size}")
