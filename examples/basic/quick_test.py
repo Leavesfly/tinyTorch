@@ -9,7 +9,7 @@
 """
 
 import sys
-sys.path.insert(0, '/Users/yefei.yf/Qoder/TinyAI/tinyTorch')
+# sys.path.insert(0, '/Users/yefei.yf/Qoder/TinyAI/tinyTorch')
 
 from tinytorch.tensor import Tensor, Shape
 from tinytorch.autograd import Variable

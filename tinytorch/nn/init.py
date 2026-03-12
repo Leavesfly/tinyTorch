@@ -32,6 +32,26 @@ def calculate_gain(nonlinearity: str = 'linear') -> float:
     return gains.get(nonlinearity, 1.0)
 
 
+def uniform(a: float, b: float, shape, dtype: str = 'float32') -> Tensor:
+    """创建服从均匀分布的新张量（工厂函数）。
+    
+    Args:
+        a: 均匀分布的下界
+        b: 均匀分布的上界
+        shape: 张量形状，可以是 tuple 或 Shape
+        dtype: 数据类型
+    
+    Returns:
+        初始化后的新张量
+    """
+    from tinytorch.tensor.shape import Shape
+    import random
+    if isinstance(shape, tuple):
+        shape = Shape(shape)
+    data = [random.uniform(a, b) for _ in range(shape.size)]
+    return Tensor(data, shape, dtype)
+
+
 def uniform_(tensor: Tensor, a: float = 0.0, b: float = 1.0) -> Tensor:
     """使用均匀分布初始化张量（原地操作）。
     

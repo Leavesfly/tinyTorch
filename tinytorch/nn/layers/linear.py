@@ -8,6 +8,7 @@ from tinytorch.nn.module import Module
 from tinytorch.nn.parameter import Parameter
 from tinytorch.autograd.variable import Variable
 from tinytorch.tensor.tensor import Tensor
+from tinytorch.tensor.shape import Shape
 from tinytorch.nn import init
 
 
@@ -83,18 +84,46 @@ class Linear(Module):
         计算: output = input @ weight^T + bias
         
         Args:
-            input: 输入变量，形状为 (batch_size, in_features)
+            input: 输入变量，形状为 (batch_size, in_features) 或
+                   (batch_size, seq_len, in_features)
         
         Returns:
-            输出变量，形状为 (batch_size, out_features)
+            输出变量，形状为 (batch_size, out_features) 或
+            (batch_size, seq_len, out_features)
         
         Raises:
-            ValueError: 当输入形状不匹配时
+            ValueError: 当输入维度不是 2D 或 3D，或特征数不匹配时
         """
-        # 检查输入形状
-        if len(input.value.shape.dims) != 2:
+        ndim = len(input.value.shape.dims)
+        
+        # 支持 3D 输入：(batch_size, seq_len, in_features)
+        if ndim == 3:
+            batch_size, seq_len, in_features = input.value.shape.dims
+            if in_features != self.in_features:
+                raise ValueError(
+                    f"Linear layer expects input with {self.in_features} features, "
+                    f"got {in_features}"
+                )
+            # reshape 为 2D: (batch_size * seq_len, in_features)
+            flat_tensor = Tensor(input.value.data,
+                                 Shape((batch_size * seq_len, in_features)), 'float32')
+            flat_input = Variable(flat_tensor, requires_grad=input.requires_grad)
+            
+            # 执行 2D 线性变换
+            weight_transposed = self.weight.transpose()
+            output = flat_input.matmul(weight_transposed)
+            if self.bias is not None:
+                output = output + self.bias
+            
+            # reshape 回 3D: (batch_size, seq_len, out_features)
+            out_tensor = Tensor(output.value.data,
+                                Shape((batch_size, seq_len, self.out_features)), 'float32')
+            return Variable(out_tensor, requires_grad=output.requires_grad)
+        
+        # 检查输入形状（2D）
+        if ndim != 2:
             raise ValueError(
-                f"Linear layer expects 2D input, got {len(input.value.shape.dims)}D"
+                f"Linear layer expects 2D or 3D input, got {ndim}D"
             )
         
         if input.value.shape.dims[1] != self.in_features:
