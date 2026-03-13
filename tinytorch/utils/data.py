@@ -4,8 +4,8 @@ import math
 import random
 from typing import Iterable, Iterator, List, Mapping, Sequence, Tuple, Optional, Any
 
-from tinytorch.autograd.variable import Variable
-from tinytorch.tensor.tensor import Tensor
+from tinytorch.autograd.tensor import Tensor
+from tinytorch.ndarr.ndarray import NdArray
 
 
 class Dataset:
@@ -101,7 +101,7 @@ def _unflatten(data: List, dims: Tuple[int, ...]) -> Any:
     ]
 
 
-def _tensor_to_nested_list(tensor: Tensor) -> List:
+def _tensor_to_nested_list(tensor: NdArray) -> List:
     return _unflatten(tensor.data, tensor.shape.dims)
 
 
@@ -110,13 +110,13 @@ def default_collate(batch: List[Any]) -> Any:
     if not batch:
         return batch
     elem = batch[0]
+    if isinstance(elem, NdArray):
+        return NdArray([_tensor_to_nested_list(item) for item in batch], dtype=elem.dtype)
     if isinstance(elem, Tensor):
-        return Tensor([_tensor_to_nested_list(item) for item in batch], dtype=elem.dtype)
-    if isinstance(elem, Variable):
         values = [item.value for item in batch]
-        return Variable(default_collate(values), requires_grad=elem.requires_grad)
+        return Tensor(default_collate(values), requires_grad=elem.requires_grad)
     if isinstance(elem, (int, float)):
-        return Tensor(batch)
+        return NdArray(batch)
     if isinstance(elem, Mapping):
         return {key: default_collate([d[key] for d in batch]) for key in elem}
     if isinstance(elem, (str, bytes)):

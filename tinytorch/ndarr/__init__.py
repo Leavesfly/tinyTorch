@@ -1,14 +1,14 @@
-"""Tensor module - Multi-dimensional array operations.
+"""NdArray module - Multi-dimensional array operations.
 
-This module provides the fundamental tensor data structure and operations
+This module provides the fundamental ndarr data structure and operations
 for numerical computing in tinyTorch framework.
 
 Classes:
-    Tensor: Multi-dimensional array class
+    NdArray: Multi-dimensional array class
     Shape: Shape management class
 """
 
-from tinytorch.tensor.tensor import Tensor
-from tinytorch.tensor.shape import Shape
+from tinytorch.ndarr.ndarray import NdArray
+from tinytorch.ndarr.shape import Shape
 
-__all__ = ['Tensor', 'Shape']
+__all__ = ['NdArray', 'Shape']

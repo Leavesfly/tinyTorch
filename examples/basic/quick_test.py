@@ -1,7 +1,7 @@
 """tinyTorch 快速测试，验证基本功能。
 
 本脚本测试以下内容：
-1. Tensor 创建和运算
+1. NdArray 创建和运算
 2. 自动微分
 3. 梯度计算
 
@@ -11,20 +11,20 @@
 import sys
 # sys.path.insert(0, '/Users/yefei.yf/Qoder/TinyAI/tinyTorch')
 
-from tinytorch.tensor import Tensor, Shape
-from tinytorch.autograd import Variable
+from tinytorch.ndarr import NdArray, Shape
+from tinytorch.autograd import Tensor
 
 
 def test_tensor_operations():
-    """测试基本的 tensor 运算。"""
-    print("=== 测试 Tensor 运算 ===")
+    """测试基本的 ndarr 运算。"""
+    print("=== 测试 NdArray 运算 ===")
     
-    # 测试 tensor 创建
-    t1 = Tensor([[1.0, 2.0], [3.0, 4.0]])
-    print(f"Tensor 1: shape={t1.shape}, data={t1.data}")
+    # 测试 ndarr 创建
+    t1 = NdArray([[1.0, 2.0], [3.0, 4.0]])
+    print(f"NdArray 1: shape={t1.shape}, data={t1.data}")
     
-    t2 = Tensor.ones((2, 2))
-    print(f"Tensor 2 (ones): shape={t2.shape}, data={t2.data}")
+    t2 = NdArray.ones((2, 2))
+    print(f"NdArray 2 (ones): shape={t2.shape}, data={t2.data}")
     
     # 测试加法
     t3 = t1.add(t2)
@@ -38,7 +38,7 @@ def test_tensor_operations():
     t5 = t1.matmul(t2)
     print(f"t1 @ t2: data={t5.data}")
     
-    print("✓ Tensor 运算测试通过\n")
+    print("✓ NdArray 运算测试通过\n")
 
 
 def test_autograd_basic():
@@ -46,7 +46,7 @@ def test_autograd_basic():
     print("=== 测试自动微分基础 ===")
     
     # 创建变量
-    x = Variable(Tensor([[2.0, 3.0]]), name="x")
+    x = Tensor(NdArray([[2.0, 3.0]]), name="x")
     print(f"x: {x.value.data}")
     
     # 简单运算：y = x^2
@@ -66,7 +66,7 @@ def test_autograd_chain():
     print("=== 测试自动微分链式法则 ===")
     
     # 创建变量
-    x = Variable(Tensor([[1.0, 2.0]]), name="x")
+    x = Tensor(NdArray([[1.0, 2.0]]), name="x")
     
     # 运算链：z = (x + 1) * 2
     y = x + 1.0  # y = x + 1
@@ -89,8 +89,8 @@ def test_matmul_grad():
     print("=== 测试矩阵乘法梯度 ===")
     
     # 创建变量
-    A = Variable(Tensor([[1.0, 2.0], [3.0, 4.0]]), name="A")
-    B = Variable(Tensor([[1.0, 0.0], [0.0, 1.0]]), name="B")  # 单位矩阵
+    A = Tensor(NdArray([[1.0, 2.0], [3.0, 4.0]]), name="A")
+    B = Tensor(NdArray([[1.0, 0.0], [0.0, 1.0]]), name="B")  # 单位矩阵
     
     # 矩阵乘法
     C = A.matmul(B)
@@ -115,7 +115,7 @@ def test_activation_functions():
     print("=== 测试激活函数 ===")
     
     # ReLU
-    x = Variable(Tensor([[-1.0, 0.0, 1.0, 2.0]]), name="x")
+    x = Tensor(NdArray([[-1.0, 0.0, 1.0, 2.0]]), name="x")
     y = x.relu()
     print(f"x: {x.value.data}")
     print(f"ReLU(x): {y.value.data}")
@@ -125,7 +125,7 @@ def test_activation_functions():
     print(f"期望值：[0.0, 0.0, 1.0, 1.0]")
     
     # Sigmoid
-    x2 = Variable(Tensor([[0.0, 1.0]]), name="x2")
+    x2 = Tensor(NdArray([[0.0, 1.0]]), name="x2")
     y2 = x2.sigmoid()
     print(f"\nx2: {x2.value.data}")
     print(f"Sigmoid(x2): {y2.value.data}")

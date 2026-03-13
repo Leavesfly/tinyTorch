@@ -7,7 +7,7 @@ Author: TinyAI Team
 """
 
 from typing import Dict, List, Iterator, Tuple, Optional, Any
-from tinytorch.autograd.variable import Variable
+from tinytorch.autograd.tensor import Tensor
 
 
 class Module:
@@ -27,7 +27,7 @@ class Module:
         >>> class MyModule(Module):
         ...     def __init__(self):
         ...         super().__init__()
-        ...         self.param = Parameter(Tensor.randn((10, 5)))
+        ...         self.param = Parameter(NdArray.randn((10, 5)))
         ...     def forward(self, x):
         ...         return x @ self.param
     """
@@ -40,11 +40,11 @@ class Module:
         """
         self._modules: Dict[str, 'Module'] = {}
         self._parameters: Dict[str, 'Parameter'] = {}
-        self._buffers: Dict[str, Variable] = {}
+        self._buffers: Dict[str, Tensor] = {}
         self.training: bool = True
         self.name: str = name if name is not None else self.__class__.__name__
     
-    def forward(self, *inputs) -> Variable:
+    def forward(self, *inputs) -> Tensor:
         """前向传播（抽象方法，子类必须实现）。
         
         Args:
@@ -58,7 +58,7 @@ class Module:
         """
         raise NotImplementedError(f"{self.__class__.__name__} must implement forward method")
     
-    def __call__(self, *inputs) -> Variable:
+    def __call__(self, *inputs) -> Tensor:
         """调用模块，执行前向传播。
         
         Args:
@@ -101,7 +101,7 @@ class Module:
                 raise TypeError(f"param must be an instance of Parameter, got {type(param)}")
             self._parameters[name] = param
     
-    def register_buffer(self, name: str, tensor: Optional[Variable]) -> None:
+    def register_buffer(self, name: str, tensor: Optional[Tensor]) -> None:
         """注册缓冲区（不可训练的张量）。
         
         Args:
@@ -112,8 +112,8 @@ class Module:
             if name in self._buffers:
                 del self._buffers[name]
         else:
-            if not isinstance(tensor, Variable):
-                raise TypeError(f"tensor must be an instance of Variable, got {type(tensor)}")
+            if not isinstance(tensor, Tensor):
+                raise TypeError(f"ndarr must be an instance of Tensor, got {type(tensor)}")
             self._buffers[name] = tensor
     
     def parameters(self, recursive: bool = True) -> List['Parameter']:
@@ -234,8 +234,8 @@ class Module:
         elif isinstance(value, Parameter):
             self.register_parameter(name, value)
             object.__setattr__(self, name, value)
-        # 如果是 Variable 实例，可能是缓冲区
-        elif isinstance(value, Variable) and hasattr(self, '_buffers'):
+        # 如果是 Tensor 实例，可能是缓冲区
+        elif isinstance(value, Tensor) and hasattr(self, '_buffers'):
             self.register_buffer(name, value)
             object.__setattr__(self, name, value)
         else:

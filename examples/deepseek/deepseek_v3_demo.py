@@ -22,8 +22,8 @@ Author: TinyAI Team
 import math
 import random
 
-from tinytorch.tensor import Tensor, Shape
-from tinytorch.autograd import Variable
+from tinytorch.ndarr import NdArray, Shape
+from tinytorch.autograd import Tensor
 from tinytorch.nn import Module
 from tinytorch.nn.layers import Linear, Embedding
 from tinytorch.nn.parameter import Parameter
@@ -50,13 +50,13 @@ class RMSNorm(Module):
         super().__init__()
         self.eps = eps
         # 可学习缩放参数 γ，初始化为全 1
-        self.weight = Parameter(Tensor.ones((hidden_size,)), name='rms_weight')
+        self.weight = Parameter(NdArray.ones((hidden_size,)), name='rms_weight')
 
-    def forward(self, x: Variable) -> Variable:
+    def forward(self, x: Tensor) -> Tensor:
         # 1) 计算 mean(x²)，shape: (1,)
         ms = (x * x).mean()
         # 2) RMS = sqrt(mean(x²) + ε)
-        eps_var = Variable(Tensor([self.eps]), requires_grad=False)
+        eps_var = Tensor(NdArray([self.eps]), requires_grad=False)
         rms = (ms + eps_var).sqrt()
         # 3) 归一化并应用可学习缩放 γ
         #    (1, hidden) / (1,) → 广播 → (1, hidden)
@@ -118,7 +118,7 @@ class RotaryEmbedding:
             result.append(x_data[i])
         return result
 
-    def apply(self, x: Variable, position: int) -> Variable:
+    def apply(self, x: Tensor, position: int) -> Tensor:
         """将 RoPE 应用到向量 x（形状 (1, dim)）。
 
         RoPE(x, pos) = x · cos + rotate_half(x) · sin
@@ -132,8 +132,8 @@ class RotaryEmbedding:
             x_data[i] * cos_vals[i] + rotated[i] * sin_vals[i]
             for i in range(dim)
         ]
-        return Variable(
-            Tensor(result, Shape((1, dim)), 'float32'),
+        return Tensor(
+            NdArray(result, Shape((1, dim)), 'float32'),
             requires_grad=x.requires_grad
         )
 
@@ -142,7 +142,7 @@ class RotaryEmbedding:
 # 3. SwiGLU 激活（DeepSeek V3 专家 FFN 的核心激活）
 # ════════════════════════════════════════════════════════════════════
 
-def silu(x: Variable) -> Variable:
+def silu(x: Tensor) -> Tensor:
     """SiLU 激活函数（Sigmoid Linear Unit）。
 
     公式：SiLU(x) = x · σ(x)
@@ -174,7 +174,7 @@ class DeepSeekExpert(Module):
         self.up_proj   = Linear(hidden_size, intermediate_size, use_bias=False)
         self.down_proj = Linear(intermediate_size, hidden_size, use_bias=False)
 
-    def forward(self, x: Variable) -> Variable:
+    def forward(self, x: Tensor) -> Tensor:
         gate = silu(self.gate_proj(x))   # SiLU 门控：(1, intermediate)
         up   = self.up_proj(x)           # 信息分支：(1, intermediate)
         h    = gate * up                 # SwiGLU：逐元素门控融合
@@ -204,7 +204,7 @@ class DeepSeekMoEGate(Module):
         self.top_k = top_k
         self.gate = Linear(hidden_size, num_routed_experts, use_bias=False)
 
-    def forward(self, x: Variable):
+    def forward(self, x: Tensor):
         """返回 (top_k_indices, top_k_weights, all_probs)。"""
         logits = self.gate(x).value.data   # (1, num_routed_experts) → 列表
 
@@ -279,7 +279,7 @@ class DeepSeekMoE(Module):
         self._expert_load = [0] * num_routed_experts
         self._total_tokens = 0
 
-    def forward(self, x: Variable) -> Variable:
+    def forward(self, x: Tensor) -> Tensor:
         # ── 共享专家（始终激活，累加所有共享专家的输出）──
         shared_out = None
         for expert in self.shared_experts:
@@ -297,9 +297,9 @@ class DeepSeekMoE(Module):
         routed_out = None
         for idx, weight in zip(top_k_indices, top_k_weights):
             expert_out = self.routed_experts[idx](x)
-            # 门控权重乘以专家输出（通过 Variable 运算保持梯度图）
-            weight_var = Variable(Tensor([weight], Shape((1,)), 'float32'),
-                                  requires_grad=False)
+            # 门控权重乘以专家输出（通过 Tensor 运算保持梯度图）
+            weight_var = Tensor(NdArray([weight], Shape((1,)), 'float32'),
+                                requires_grad=False)
             weighted = expert_out * weight_var   # (1, hidden) * (1,) → 广播
             routed_out = weighted if routed_out is None else (routed_out + weighted)
 
@@ -405,7 +405,7 @@ class MultiHeadLatentAttention(Module):
         # RoPE 作用于完整的 attn_dim 维度
         self.rope = RotaryEmbedding(dim=self.attn_dim)
 
-    def forward(self, x: Variable, position: int = 0) -> Variable:
+    def forward(self, x: Tensor, position: int = 0) -> Tensor:
         """前向传播。
 
         Args:
@@ -425,10 +425,10 @@ class MultiHeadLatentAttention(Module):
         # 分割 K 和 V（前半 = K，后半 = V）
         half   = self.attn_dim
         kv_dat = kv.value.data
-        K = Variable(Tensor(kv_dat[:half], Shape((1, half)), 'float32'),
-                     requires_grad=x.requires_grad)
-        V = Variable(Tensor(kv_dat[half:], Shape((1, half)), 'float32'),
-                     requires_grad=x.requires_grad)
+        K = Tensor(NdArray(kv_dat[:half], Shape((1, half)), 'float32'),
+                   requires_grad=x.requires_grad)
+        V = Tensor(NdArray(kv_dat[half:], Shape((1, half)), 'float32'),
+                   requires_grad=x.requires_grad)
         K = self.rope.apply(K, position)           # K 也注入位置信息
 
         # ── Scaled Dot-Product Attention ──
@@ -441,8 +441,8 @@ class MultiHeadLatentAttention(Module):
 
         # attn_w · V，形状 (1, attn_dim)
         out_data = [v * attn_w for v in V.value.data]
-        output = Variable(
-            Tensor(out_data, V.value.shape, 'float32'),
+        output = Tensor(
+            NdArray(out_data, V.value.shape, 'float32'),
             requires_grad=x.requires_grad
         )
 
@@ -484,7 +484,7 @@ class DeepSeekV3Block(Module):
             num_routed_experts, num_shared_experts, top_k
         )
 
-    def forward(self, x: Variable, position: int = 0) -> Variable:
+    def forward(self, x: Tensor, position: int = 0) -> Tensor:
         # Pre-RMSNorm → Attention → 残差连接
         x = x + self.attention(self.attn_norm(x), position)
         # Pre-RMSNorm → MoE → 残差连接
@@ -572,7 +572,7 @@ class DeepSeekV3Model(Module):
         # 语言模型头（投影到词汇表大小）
         self.lm_head = Linear(hidden_size, vocab_size, use_bias=False)
 
-    def forward(self, input_ids: Variable) -> Variable:
+    def forward(self, input_ids: Tensor) -> Tensor:
         """前向传播（取序列最后一个位置，用于 next-token 预测）。
 
         Args:
@@ -587,8 +587,8 @@ class DeepSeekV3Model(Module):
 
         # 取最后一个 token 的隐向量
         last = emb.value.data[-self.hidden_size:]
-        x = Variable(
-            Tensor(last, Shape((1, self.hidden_size)), 'float32'),
+        x = Tensor(
+            NdArray(last, Shape((1, self.hidden_size)), 'float32'),
             requires_grad=emb.requires_grad
         )
 
@@ -612,9 +612,9 @@ class DeepSeekV3Model(Module):
         """
         generated = prompt_ids.copy()
         for _ in range(max_new_tokens):
-            inp = Variable(
-                Tensor([float(i) for i in generated],
-                       Shape((1, len(generated))), 'float32'),
+            inp = Tensor(
+                NdArray([float(i) for i in generated],
+                        Shape((1, len(generated))), 'float32'),
                 requires_grad=False
             )
             logits = self.forward(inp)
@@ -702,8 +702,8 @@ def main():
     input_ids = [1, 2, 3, 4, 5]
     print(f"\n输入 token IDs: {input_ids}")
 
-    inp = Variable(
-        Tensor([float(i) for i in input_ids], Shape((1, 5)), 'float32'),
+    inp = Tensor(
+        NdArray([float(i) for i in input_ids], Shape((1, 5)), 'float32'),
         requires_grad=False
     )
     print("正在执行前向传播...")
@@ -742,8 +742,8 @@ def main():
     print("=" * 68)
 
     rope = attn.rope
-    dummy = Variable(
-        Tensor([1.0] * attn_dim, Shape((1, attn_dim)), 'float32'),
+    dummy = Tensor(
+        NdArray([1.0] * attn_dim, Shape((1, attn_dim)), 'float32'),
         requires_grad=False
     )
     pos0 = rope.apply(dummy, 0)
@@ -767,8 +767,8 @@ def main():
     for i in range(30):
         # 构造各不相同的输入向量
         vals = [math.sin(i * 0.3 + j * 0.1) for j in range(model.hidden_size)]
-        v = Variable(Tensor(vals, Shape((1, model.hidden_size)), 'float32'),
-                     requires_grad=False)
+        v = Tensor(NdArray(vals, Shape((1, model.hidden_size)), 'float32'),
+                   requires_grad=False)
         moe_layer.forward(ffn_norm(v))
 
     print(f"\nLayer 0 MoE 路由统计（共享专家始终激活，下列为路由专家）：")

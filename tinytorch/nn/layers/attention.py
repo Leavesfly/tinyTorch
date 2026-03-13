@@ -7,8 +7,8 @@ import math
 from tinytorch.nn.module import Module
 from tinytorch.nn.parameter import Parameter
 from tinytorch.nn.layers.linear import Linear
-from tinytorch.autograd import Variable
-from tinytorch.tensor import Tensor, Shape
+from tinytorch.autograd import Tensor
+from tinytorch.ndarr import NdArray, Shape
 
 
 class MultiHeadAttention(Module):
@@ -32,7 +32,7 @@ class MultiHeadAttention(Module):
     
     Example:
         >>> attn = MultiHeadAttention(embed_dim=512, num_heads=8)
-        >>> x = Variable(Tensor.randn((batch_size, seq_len, 512)))
+        >>> x = Tensor(NdArray.randn((batch_size, seq_len, 512)))
         >>> output = attn(x)
         >>> print(output.value.shape)
         (batch_size, seq_len, 512)
@@ -64,8 +64,8 @@ class MultiHeadAttention(Module):
         # 输出投影层
         self.W_o = Linear(embed_dim, embed_dim, use_bias=True)
     
-    def forward(self, query: Variable, key: Variable = None, value: Variable = None,
-                mask: Variable = None) -> Variable:
+    def forward(self, query: Tensor, key: Tensor = None, value: Tensor = None,
+                mask: Tensor = None) -> Tensor:
         """前向传播。
         
         Args:
@@ -105,7 +105,7 @@ class MultiHeadAttention(Module):
         
         return output
     
-    def _split_heads(self, x: Variable, batch_size: int, seq_len: int) -> Variable:
+    def _split_heads(self, x: Tensor, batch_size: int, seq_len: int) -> Tensor:
         """将最后一个维度分割为多头。
         
         Args:
@@ -132,10 +132,10 @@ class MultiHeadAttention(Module):
                         data.append(x.value.data[orig_idx])
         
         new_shape = Shape((batch_size, self.num_heads, seq_len, self.head_dim))
-        new_tensor = Tensor(data, new_shape, 'float32')
-        return Variable(new_tensor, requires_grad=x.requires_grad)
+        new_tensor = NdArray(data, new_shape, 'float32')
+        return Tensor(new_tensor, requires_grad=x.requires_grad)
     
-    def _merge_heads(self, x: Variable, batch_size: int, seq_len: int) -> Variable:
+    def _merge_heads(self, x: Tensor, batch_size: int, seq_len: int) -> Tensor:
         """合并多头。
         
         Args:
@@ -159,11 +159,11 @@ class MultiHeadAttention(Module):
                         data.append(x.value.data[orig_idx])
         
         new_shape = Shape((batch_size, seq_len, self.embed_dim))
-        new_tensor = Tensor(data, new_shape, 'float32')
-        return Variable(new_tensor, requires_grad=x.requires_grad)
+        new_tensor = NdArray(data, new_shape, 'float32')
+        return Tensor(new_tensor, requires_grad=x.requires_grad)
     
-    def _scaled_dot_product_attention(self, Q: Variable, K: Variable, 
-                                     V: Variable, mask: Variable = None) -> Variable:
+    def _scaled_dot_product_attention(self, Q: Tensor, K: Tensor,
+                                      V: Tensor, mask: Tensor = None) -> Tensor:
         """缩放点积注意力。
         
         Args:
@@ -198,8 +198,8 @@ class MultiHeadAttention(Module):
                         scores_data.append(score)
         
         scores_shape = Shape((batch_size, num_heads, seq_len, seq_len))
-        scores_tensor = Tensor(scores_data, scores_shape, 'float32')
-        scores = Variable(scores_tensor, requires_grad=Q.requires_grad)
+        scores_tensor = NdArray(scores_data, scores_shape, 'float32')
+        scores = Tensor(scores_tensor, requires_grad=Q.requires_grad)
         
         # Softmax 操作
         attn_weights = self._softmax(scores, dim=-1)
@@ -221,11 +221,11 @@ class MultiHeadAttention(Module):
                         output_data.append(val)
         
         output_shape = Shape((batch_size, num_heads, seq_len, head_dim))
-        output_tensor = Tensor(output_data, output_shape, 'float32')
-        return Variable(output_tensor, requires_grad=Q.requires_grad)
+        output_tensor = NdArray(output_data, output_shape, 'float32')
+        return Tensor(output_tensor, requires_grad=Q.requires_grad)
     
-    def _extract_matrix(self, x: Variable, b: int, h: int, 
-                       seq_len: int, head_dim: int) -> list:
+    def _extract_matrix(self, x: Tensor, b: int, h: int,
+                        seq_len: int, head_dim: int) -> list:
         """提取 (b, h) 位置的矩阵。"""
         data = []
         for s in range(seq_len):
@@ -237,7 +237,7 @@ class MultiHeadAttention(Module):
                 data.append(x.value.data[idx])
         return data
     
-    def _extract_attn_matrix(self, x: Variable, b: int, h: int, seq_len: int) -> list:
+    def _extract_attn_matrix(self, x: Tensor, b: int, h: int, seq_len: int) -> list:
         """提取注意力权重矩阵。"""
         data = []
         for i in range(seq_len):
@@ -249,7 +249,7 @@ class MultiHeadAttention(Module):
                 data.append(x.value.data[idx])
         return data
     
-    def _softmax(self, x: Variable, dim: int = -1) -> Variable:
+    def _softmax(self, x: Tensor, dim: int = -1) -> Tensor:
         """Softmax 操作（沿最后一个维度）。"""
         batch_size, num_heads, seq_len_q, seq_len_k = x.value.shape.dims
         
@@ -275,8 +275,8 @@ class MultiHeadAttention(Module):
                     
                     result_data.extend(softmax_row)
         
-        result_tensor = Tensor(result_data, x.value.shape, 'float32')
-        return Variable(result_tensor, requires_grad=x.requires_grad)
+        result_tensor = NdArray(result_data, x.value.shape, 'float32')
+        return Tensor(result_tensor, requires_grad=x.requires_grad)
     
     def __repr__(self) -> str:
         """返回层的字符串表示。"""

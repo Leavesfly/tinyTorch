@@ -9,11 +9,11 @@
 1. **[快速入门](01_quickstart.md)**
    - tinyTorch 简介
    - 安装和环境配置
-   - 核心概念：Tensor、Variable、Module
+   - 核心概念：NdArray、Tensor、Module
    - 第一个完整示例：线性回归
    - 预计学习时间：30 分钟
 
-2. **[Tensor 操作详解](02_tensor_operations.md)**
+2. **[NdArray 操作详解](02_tensor_operations.md)**
    - 张量的创建和基本运算
    - 形状操作：reshape、squeeze、flatten
    - 索引和切片
@@ -23,7 +23,7 @@
 
 3. **[自动微分系统](03_autograd_system.md)**
    - 什么是自动微分
-   - Variable 和 Function
+   - Tensor 和 Function
    - 计算图和反向传播
    - 常用操作的梯度
    - 梯度检查和调试

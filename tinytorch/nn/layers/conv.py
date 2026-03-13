@@ -5,8 +5,8 @@ Author: TinyAI Team
 
 from tinytorch.nn.module import Module
 from tinytorch.nn.parameter import Parameter
-from tinytorch.autograd import Variable
-from tinytorch.tensor import Tensor, Shape
+from tinytorch.autograd import Tensor
+from tinytorch.ndarr import NdArray, Shape
 from tinytorch.nn import init
 
 
@@ -27,7 +27,7 @@ class Conv2d(Module):
     
     Example:
         >>> conv = Conv2d(in_channels=3, out_channels=64, kernel_size=3, stride=1, padding=1)
-        >>> x = Variable(Tensor.randn((1, 3, 32, 32)))
+        >>> x = Tensor(NdArray.randn((1, 3, 32, 32)))
         >>> y = conv(x)
         >>> print(y.value.shape)
         (1, 64, 32, 32)
@@ -56,18 +56,18 @@ class Conv2d(Module):
         
         # 初始化权重：(out_channels, in_channels, kernel_size, kernel_size)
         weight_shape = (out_channels, in_channels, kernel_size, kernel_size)
-        weight_tensor = Tensor.zeros(weight_shape)
+        weight_tensor = NdArray.zeros(weight_shape)
         init.kaiming_uniform_(weight_tensor)
         self.weight = Parameter(weight_tensor, name='weight')
         
         # 初始化偏置：(out_channels,)
         if use_bias:
-            bias_tensor = Tensor.zeros((out_channels,))
+            bias_tensor = NdArray.zeros((out_channels,))
             self.bias = Parameter(bias_tensor, name='bias')
         else:
             self.bias = None
     
-    def forward(self, input: Variable) -> Variable:
+    def forward(self, input: Tensor) -> Tensor:
         """前向传播。
         
         Args:
@@ -137,11 +137,11 @@ class Conv2d(Module):
         
         # 构造输出张量
         output_shape = Shape((batch_size, self.out_channels, out_height, out_width))
-        output_tensor = Tensor(output_data, output_shape, 'float32')
+        output_tensor = NdArray(output_data, output_shape, 'float32')
         
-        return Variable(output_tensor, requires_grad=input.requires_grad)
+        return Tensor(output_tensor, requires_grad=input.requires_grad)
     
-    def _pad_input(self, input_tensor: Tensor, padding: int) -> Tensor:
+    def _pad_input(self, input_tensor: NdArray, padding: int) -> NdArray:
         """对输入进行零填充。
         
         Args:
@@ -178,7 +178,7 @@ class Conv2d(Module):
                         padded_data[dst_idx] = input_tensor.data[src_idx]
         
         padded_shape = Shape((batch_size, channels, padded_height, padded_width))
-        return Tensor(padded_data, padded_shape, input_tensor.dtype)
+        return NdArray(padded_data, padded_shape, input_tensor.dtype)
     
     def __repr__(self) -> str:
         """返回层的字符串表示。"""

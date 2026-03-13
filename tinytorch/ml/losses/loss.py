@@ -3,7 +3,7 @@
 Author: TinyAI Team
 """
 
-from tinytorch.autograd.variable import Variable
+from tinytorch.autograd.tensor import Tensor
 
 
 class Loss:
@@ -26,7 +26,7 @@ class Loss:
         """
         self.name = name or self.__class__.__name__
     
-    def forward(self, pred: Variable, target: Variable) -> Variable:
+    def forward(self, pred: Tensor, target: Tensor) -> Tensor:
         """计算损失（抽象方法，子类必须实现）。
         
         Args:
@@ -41,7 +41,7 @@ class Loss:
         """
         raise NotImplementedError(f"{self.__class__.__name__} must implement forward method")
     
-    def __call__(self, pred: Variable, target: Variable) -> Variable:
+    def __call__(self, pred: Tensor, target: Tensor) -> Tensor:
         """调用损失函数。
         
         Args:

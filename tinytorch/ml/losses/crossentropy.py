@@ -5,9 +5,9 @@ Author: TinyAI Team
 
 import math
 from tinytorch.ml.losses.loss import Loss
-from tinytorch.autograd import Variable
-from tinytorch.tensor import Tensor
-from tinytorch.tensor.shape import Shape
+from tinytorch.autograd import Tensor
+from tinytorch.ndarr import NdArray
+from tinytorch.ndarr.shape import Shape
 
 
 class CrossEntropyLoss(Loss):
@@ -27,9 +27,9 @@ class CrossEntropyLoss(Loss):
     Example:
         >>> loss_fn = CrossEntropyLoss()
         >>> # logits: (batch_size, num_classes)
-        >>> logits = Variable(Tensor([[2.0, 1.0, 0.1], [0.5, 2.5, 1.0]]))
+        >>> logits = Tensor(NdArray([[2.0, 1.0, 0.1], [0.5, 2.5, 1.0]]))
         >>> # targets: (batch_size,) 类别索引
-        >>> targets = Variable(Tensor([0, 1]))
+        >>> targets = Tensor(NdArray([0, 1]))
         >>> loss = loss_fn(logits, targets)
     """
     
@@ -45,7 +45,7 @@ class CrossEntropyLoss(Loss):
         if reduction not in ['mean', 'sum', 'none']:
             raise ValueError(f"reduction must be 'mean', 'sum' or 'none', got {reduction}")
     
-    def forward(self, input: Variable, target: Variable) -> Variable:
+    def forward(self, input: Tensor, target: Tensor) -> Tensor:
         """计算交叉熵损失。
         
         Args:
@@ -96,11 +96,11 @@ class CrossEntropyLoss(Loss):
             total_loss = sum(losses)
         else:  # 'none'
             # 返回每个样本的损失
-            return Variable(Tensor(losses, Shape((len(losses),)), 'float32'), requires_grad=True)
+            return Tensor(NdArray(losses, Shape((len(losses),)), 'float32'), requires_grad=True)
         
         # 返回标量损失
-        loss_tensor = Tensor([total_loss], Shape((1,)), 'float32')
-        return Variable(loss_tensor, requires_grad=True)
+        loss_tensor = NdArray([total_loss], Shape((1,)), 'float32')
+        return Tensor(loss_tensor, requires_grad=True)
     
     def __repr__(self) -> str:
         """返回损失函数的字符串表示。"""
@@ -121,8 +121,8 @@ class BCELoss(Loss):
     Example:
         >>> loss_fn = BCELoss()
         >>> # 预测概率（已经过 sigmoid）
-        >>> probs = Variable(Tensor([0.8, 0.3, 0.9]))
-        >>> targets = Variable(Tensor([1.0, 0.0, 1.0]))
+        >>> probs = Tensor(NdArray([0.8, 0.3, 0.9]))
+        >>> targets = Tensor(NdArray([1.0, 0.0, 1.0]))
         >>> loss = loss_fn(probs, targets)
     """
     
@@ -138,7 +138,7 @@ class BCELoss(Loss):
         if reduction not in ['mean', 'sum', 'none']:
             raise ValueError(f"reduction must be 'mean', 'sum' or 'none', got {reduction}")
     
-    def forward(self, input: Variable, target: Variable) -> Variable:
+    def forward(self, input: Tensor, target: Tensor) -> Tensor:
         """计算二元交叉熵损失。
         
         Args:
@@ -179,10 +179,10 @@ class BCELoss(Loss):
         elif self.reduction == 'sum':
             total_loss = sum(losses)
         else:  # 'none'
-            return Variable(Tensor(losses, input.value.shape, 'float32'), requires_grad=True)
+            return Tensor(NdArray(losses, input.value.shape, 'float32'), requires_grad=True)
         
-        loss_tensor = Tensor([total_loss], (1,), 'float32')
-        return Variable(loss_tensor, requires_grad=True)
+        loss_tensor = NdArray([total_loss], (1,), 'float32')
+        return Tensor(loss_tensor, requires_grad=True)
     
     def __repr__(self) -> str:
         """返回损失函数的字符串表示。"""

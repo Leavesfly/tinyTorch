@@ -6,7 +6,7 @@ Author: TinyAI Team
 """
 
 import math
-from tinytorch.tensor.tensor import Tensor
+from tinytorch.ndarr.ndarray import NdArray
 from tinytorch.nn.parameter import Parameter
 
 
@@ -32,7 +32,7 @@ def calculate_gain(nonlinearity: str = 'linear') -> float:
     return gains.get(nonlinearity, 1.0)
 
 
-def uniform(a: float, b: float, shape, dtype: str = 'float32') -> Tensor:
+def uniform(a: float, b: float, shape, dtype: str = 'float32') -> NdArray:
     """创建服从均匀分布的新张量（工厂函数）。
     
     Args:
@@ -44,15 +44,15 @@ def uniform(a: float, b: float, shape, dtype: str = 'float32') -> Tensor:
     Returns:
         初始化后的新张量
     """
-    from tinytorch.tensor.shape import Shape
+    from tinytorch.ndarr.shape import Shape
     import random
     if isinstance(shape, tuple):
         shape = Shape(shape)
     data = [random.uniform(a, b) for _ in range(shape.size)]
-    return Tensor(data, shape, dtype)
+    return NdArray(data, shape, dtype)
 
 
-def uniform_(tensor: Tensor, a: float = 0.0, b: float = 1.0) -> Tensor:
+def uniform_(tensor: NdArray, a: float = 0.0, b: float = 1.0) -> NdArray:
     """使用均匀分布初始化张量（原地操作）。
     
     Args:
@@ -69,7 +69,7 @@ def uniform_(tensor: Tensor, a: float = 0.0, b: float = 1.0) -> Tensor:
     return tensor
 
 
-def normal_(tensor: Tensor, mean: float = 0.0, std: float = 1.0) -> Tensor:
+def normal_(tensor: NdArray, mean: float = 0.0, std: float = 1.0) -> NdArray:
     """使用正态分布初始化张量（原地操作）。
     
     Args:
@@ -86,7 +86,7 @@ def normal_(tensor: Tensor, mean: float = 0.0, std: float = 1.0) -> Tensor:
     return tensor
 
 
-def constant_(tensor: Tensor, val: float) -> Tensor:
+def constant_(tensor: NdArray, val: float) -> NdArray:
     """使用常数初始化张量（原地操作）。
     
     Args:
@@ -101,7 +101,7 @@ def constant_(tensor: Tensor, val: float) -> Tensor:
     return tensor
 
 
-def zeros_(tensor: Tensor) -> Tensor:
+def zeros_(tensor: NdArray) -> NdArray:
     """使用零初始化张量（原地操作）。
     
     Args:
@@ -113,7 +113,7 @@ def zeros_(tensor: Tensor) -> Tensor:
     return constant_(tensor, 0.0)
 
 
-def ones_(tensor: Tensor) -> Tensor:
+def ones_(tensor: NdArray) -> NdArray:
     """使用一初始化张量（原地操作）。
     
     Args:
@@ -125,7 +125,7 @@ def ones_(tensor: Tensor) -> Tensor:
     return constant_(tensor, 1.0)
 
 
-def xavier_uniform_(tensor: Tensor, gain: float = 1.0) -> Tensor:
+def xavier_uniform_(tensor: NdArray, gain: float = 1.0) -> NdArray:
     """使用 Xavier 均匀分布初始化张量（原地操作）。
     
     也称为 Glorot 初始化。适用于 tanh 和 sigmoid 激活函数。
@@ -145,7 +145,7 @@ def xavier_uniform_(tensor: Tensor, gain: float = 1.0) -> Tensor:
     return uniform_(tensor, -a, a)
 
 
-def xavier_normal_(tensor: Tensor, gain: float = 1.0) -> Tensor:
+def xavier_normal_(tensor: NdArray, gain: float = 1.0) -> NdArray:
     """使用 Xavier 正态分布初始化张量（原地操作）。
     
     也称为 Glorot 初始化。适用于 tanh 和 sigmoid 激活函数。
@@ -164,8 +164,8 @@ def xavier_normal_(tensor: Tensor, gain: float = 1.0) -> Tensor:
     return normal_(tensor, 0.0, std)
 
 
-def kaiming_uniform_(tensor: Tensor, a: float = 0, mode: str = 'fan_in', 
-                     nonlinearity: str = 'leaky_relu') -> Tensor:
+def kaiming_uniform_(tensor: NdArray, a: float = 0, mode: str = 'fan_in',
+                     nonlinearity: str = 'leaky_relu') -> NdArray:
     """使用 Kaiming 均匀分布初始化张量（原地操作）。
     
     也称为 He 初始化。适用于 ReLU 激活函数。
@@ -186,8 +186,8 @@ def kaiming_uniform_(tensor: Tensor, a: float = 0, mode: str = 'fan_in',
     return uniform_(tensor, -bound, bound)
 
 
-def kaiming_normal_(tensor: Tensor, a: float = 0, mode: str = 'fan_in',
-                    nonlinearity: str = 'leaky_relu') -> Tensor:
+def kaiming_normal_(tensor: NdArray, a: float = 0, mode: str = 'fan_in',
+                    nonlinearity: str = 'leaky_relu') -> NdArray:
     """使用 Kaiming 正态分布初始化张量（原地操作）。
     
     也称为 He 初始化。适用于 ReLU 激活函数。
@@ -207,7 +207,7 @@ def kaiming_normal_(tensor: Tensor, a: float = 0, mode: str = 'fan_in',
     return normal_(tensor, 0.0, std)
 
 
-def _calculate_fan_in_and_fan_out(tensor: Tensor) -> tuple:
+def _calculate_fan_in_and_fan_out(tensor: NdArray) -> tuple:
     """计算张量的 fan_in 和 fan_out。
     
     对于二维张量（权重矩阵）：
@@ -227,7 +227,7 @@ def _calculate_fan_in_and_fan_out(tensor: Tensor) -> tuple:
     dimensions = len(tensor.shape.dims)
     
     if dimensions < 2:
-        raise ValueError("Fan in and fan out can not be computed for tensor with fewer than 2 dimensions")
+        raise ValueError("Fan in and fan out can not be computed for ndarr with fewer than 2 dimensions")
     
     if dimensions == 2:  # 线性层权重 (out_features, in_features)
         fan_in = tensor.shape.dims[1]
@@ -242,7 +242,7 @@ def _calculate_fan_in_and_fan_out(tensor: Tensor) -> tuple:
     return fan_in, fan_out
 
 
-def _calculate_correct_fan(tensor: Tensor, mode: str) -> int:
+def _calculate_correct_fan(tensor: NdArray, mode: str) -> int:
     """根据模式计算正确的 fan 值。
     
     Args:

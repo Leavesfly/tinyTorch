@@ -6,7 +6,7 @@ Author: TinyAI Team
 """
 
 from tinytorch.nn.module import Module
-from tinytorch.autograd.variable import Variable
+from tinytorch.autograd.tensor import Tensor
 
 
 class ReLU(Module):
@@ -16,7 +16,7 @@ class ReLU(Module):
     
     Example:
         >>> relu = ReLU()
-        >>> x = Variable(Tensor([[-1, 2], [3, -4]]))
+        >>> x = Tensor(NdArray([[-1, 2], [3, -4]]))
         >>> y = relu(x)
         >>> print(y.value.to_list())
         [[0, 2], [3, 0]]
@@ -30,7 +30,7 @@ class ReLU(Module):
         """
         super().__init__(name=name or 'ReLU')
     
-    def forward(self, input: Variable) -> Variable:
+    def forward(self, input: Tensor) -> Tensor:
         """前向传播。
         
         Args:
@@ -52,7 +52,7 @@ class Sigmoid(Module):
     
     Example:
         >>> sigmoid = Sigmoid()
-        >>> x = Variable(Tensor([[0, 1], [2, -1]]))
+        >>> x = Tensor(NdArray([[0, 1], [2, -1]]))
         >>> y = sigmoid(x)
     """
     
@@ -64,7 +64,7 @@ class Sigmoid(Module):
         """
         super().__init__(name=name or 'Sigmoid')
     
-    def forward(self, input: Variable) -> Variable:
+    def forward(self, input: Tensor) -> Tensor:
         """前向传播。
         
         Args:
@@ -86,7 +86,7 @@ class Tanh(Module):
     
     Example:
         >>> tanh = Tanh()
-        >>> x = Variable(Tensor([[0, 1], [2, -1]]))
+        >>> x = Tensor(NdArray([[0, 1], [2, -1]]))
         >>> y = tanh(x)
     """
     
@@ -98,7 +98,7 @@ class Tanh(Module):
         """
         super().__init__(name=name or 'Tanh')
     
-    def forward(self, input: Variable) -> Variable:
+    def forward(self, input: Tensor) -> Tensor:
         """前向传播。
         
         Args:
@@ -120,7 +120,7 @@ class LeakyReLU(Module):
     
     Example:
         >>> leaky_relu = LeakyReLU(negative_slope=0.01)
-        >>> x = Variable(Tensor([[-1, 2], [3, -4]]))
+        >>> x = Tensor(NdArray([[-1, 2], [3, -4]]))
         >>> y = leaky_relu(x)
     """
     
@@ -134,7 +134,7 @@ class LeakyReLU(Module):
         super().__init__(name=name or 'LeakyReLU')
         self.negative_slope = negative_slope
     
-    def forward(self, input: Variable) -> Variable:
+    def forward(self, input: Tensor) -> Tensor:
         """前向传播。
         
         Args:

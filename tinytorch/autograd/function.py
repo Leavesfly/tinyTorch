@@ -8,7 +8,7 @@ Version: 0.1.0
 """
 
 from typing import List, Tuple
-from tinytorch.tensor import Tensor
+from tinytorch.ndarr import NdArray
 
 
 class Function:
@@ -18,8 +18,8 @@ class Function:
     Function 维护对输入变量和保存张量的引用，以便进行反向传播。
     
     属性:
-        inputs: 输入 Variable 对象列表
-        outputs: 输出 Variable 对象列表
+        inputs: 输入 Tensor 对象列表
+        outputs: 输出 Tensor 对象列表
         saved_tensors: 前向传播时保存的张量列表
     
     示例:
@@ -40,10 +40,10 @@ class Function:
         """调用函数（与 call 方法相同）。
         
         参数:
-            *inputs: Variable 输入
+            *inputs: Tensor 输入
             
         返回:
-            输出 Variable
+            输出 Tensor
         """
         return self.call(*inputs)
     
@@ -57,13 +57,13 @@ class Function:
         4. 设置反向传播图连接
         
         参数:
-            *inputs: Variable 输入
+            *inputs: Tensor 输入
             
         返回:
-            输出 Variable（或多输出的 Variables 元组）
+            输出 Tensor（或多输出的 Variables 元组）
         """
         # 在此处导入以避免循环依赖
-        from tinytorch.autograd.variable import Variable
+        from tinytorch.autograd.tensor import Tensor
         
         # 存储输入变量
         self.inputs = list(inputs)
@@ -79,19 +79,19 @@ class Function:
             # 多输出
             output_vars = []
             for tensor in output_tensors:
-                var = Variable(tensor)
+                var = Tensor(tensor)
                 var.creator = self
                 output_vars.append(var)
             self.outputs = output_vars
             return tuple(output_vars)
         else:
             # 单输出
-            output_var = Variable(output_tensors)
+            output_var = Tensor(output_tensors)
             output_var.creator = self
             self.outputs = [output_var]
             return output_var
     
-    def forward(self, *inputs: Tensor) -> Tensor:
+    def forward(self, *inputs: NdArray) -> NdArray:
         """前向传播计算。
         
         子类必须实现此方法以定义前向计算。
@@ -107,7 +107,7 @@ class Function:
         """
         raise NotImplementedError(f"{self.__class__.__name__} must implement forward()")
     
-    def backward(self, grad_output: Tensor) -> List[Tensor]:
+    def backward(self, grad_output: NdArray) -> List[NdArray]:
         """反向传播计算。
         
         子类必须实现此方法，根据输出梯度计算输入梯度。
@@ -123,7 +123,7 @@ class Function:
         """
         raise NotImplementedError(f"{self.__class__.__name__} must implement backward()")
     
-    def save_for_backward(self, *tensors: Tensor):
+    def save_for_backward(self, *tensors: NdArray):
         """保存反向计算所需的张量。
         
         参数:
@@ -131,7 +131,7 @@ class Function:
         """
         self.saved_tensors = list(tensors)
     
-    def get_saved_tensors(self) -> Tuple[Tensor, ...]:
+    def get_saved_tensors(self) -> Tuple[NdArray, ...]:
         """获取保存的张量。
         
         返回:

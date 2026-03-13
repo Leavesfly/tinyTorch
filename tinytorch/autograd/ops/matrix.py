@@ -7,7 +7,7 @@
 """
 
 from typing import List, Tuple, Union
-from tinytorch.tensor import Tensor
+from tinytorch.ndarr import NdArray
 from tinytorch.autograd.function import Function
 
 
@@ -18,12 +18,12 @@ class MatMul(Function):
     反向传播：dL/dA = dL/dC @ B^T, dL/dB = A^T @ dL/dC
     """
     
-    def forward(self, a: Tensor, b: Tensor) -> Tensor:
+    def forward(self, a: NdArray, b: NdArray) -> NdArray:
         """矩阵乘法的前向传播。"""
         self.save_for_backward(a, b)
         return a.matmul(b)
     
-    def backward(self, grad_output: Tensor) -> List[Tensor]:
+    def backward(self, grad_output: NdArray) -> List[NdArray]:
         """矩阵乘法的反向传播。"""
         a, b = self.get_saved_tensors()
         
@@ -52,11 +52,11 @@ class Transpose(Function):
         super().__init__()
         self.axes = axes
     
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: NdArray) -> NdArray:
         """转置的前向传播。"""
         return x.transpose(self.axes)
     
-    def backward(self, grad_output: Tensor) -> List[Tensor]:
+    def backward(self, grad_output: NdArray) -> List[NdArray]:
         """转置的反向传播。"""
         if self.axes is None:
             # 默认转置：反转所有维度
@@ -87,11 +87,11 @@ class Reshape(Function):
         super().__init__()
         self.new_shape = new_shape
     
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: NdArray) -> NdArray:
         """重塑的前向传播。"""
         self.old_shape = x.shape
         return x.reshape(self.new_shape)
     
-    def backward(self, grad_output: Tensor) -> List[Tensor]:
+    def backward(self, grad_output: NdArray) -> List[NdArray]:
         """重塑的反向传播。"""
         return [grad_output.reshape(self.old_shape.dims)]

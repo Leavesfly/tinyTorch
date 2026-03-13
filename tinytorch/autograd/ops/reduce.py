@@ -7,7 +7,7 @@
 """
 
 from typing import List, Optional
-from tinytorch.tensor import Tensor
+from tinytorch.ndarr import NdArray
 from tinytorch.autograd.function import Function
 
 
@@ -29,12 +29,12 @@ class Sum(Function):
         self.axis = axis
         self.keepdims = keepdims
     
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: NdArray) -> NdArray:
         """求和的前向传播。"""
         self.input_shape = x.shape
         return x.sum(axis=self.axis, keepdims=self.keepdims)
     
-    def backward(self, grad_output: Tensor) -> List[Tensor]:
+    def backward(self, grad_output: NdArray) -> List[NdArray]:
         """求和的反向传播。"""
         # 将梯度广播回输入形状
         if self.keepdims:
@@ -44,8 +44,8 @@ class Sum(Function):
             # 需要重新添加归约的维度
             if self.axis is None:
                 # 对所有维度求和
-                grad_x = Tensor([grad_output.data[0]] * self.input_shape.size, 
-                              self.input_shape, grad_output.dtype)
+                grad_x = NdArray([grad_output.data[0]] * self.input_shape.size,
+                                 self.input_shape, grad_output.dtype)
             else:
                 # 对特定轴求和
                 # 扩展维度并广播
@@ -76,7 +76,7 @@ class Mean(Function):
         self.axis = axis
         self.keepdims = keepdims
     
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: NdArray) -> NdArray:
         """平均的前向传播。"""
         self.input_shape = x.shape
         
@@ -89,7 +89,7 @@ class Mean(Function):
         
         return x.mean(axis=self.axis, keepdims=self.keepdims)
     
-    def backward(self, grad_output: Tensor) -> List[Tensor]:
+    def backward(self, grad_output: NdArray) -> List[NdArray]:
         """平均的反向传播。"""
         # 梯度除以计数
         grad_output = grad_output.div(self.count)
@@ -99,8 +99,8 @@ class Mean(Function):
             grad_x = grad_output._broadcast_to(self.input_shape)
         else:
             if self.axis is None:
-                grad_x = Tensor([grad_output.data[0]] * self.input_shape.size,
-                              self.input_shape, grad_output.dtype)
+                grad_x = NdArray([grad_output.data[0]] * self.input_shape.size,
+                                 self.input_shape, grad_output.dtype)
             else:
                 new_shape_list = list(grad_output.shape.dims)
                 axis = self.axis if self.axis >= 0 else self.input_shape.ndim + self.axis

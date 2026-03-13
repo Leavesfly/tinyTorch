@@ -83,7 +83,7 @@ class Adam(Optimizer):
                 continue
             
             param_id = id(param)
-            grad = param.grad  # 获取梯度（grad 是 Tensor 对象）
+            grad = param.grad  # 获取梯度（grad 是 NdArray 对象）
             
             # 权重衰减
             if self.weight_decay != 0:

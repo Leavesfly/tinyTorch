@@ -8,14 +8,14 @@ tinyTorch 的灵感来自 tinyai-deeplearning 项目和 PyTorch，提供
 Python: 3.7+
 
 模块：
-    tensor: 多维数组运算
+    ndarr: 多维数组运算
     autograd: 自动微分引擎
     nn: 神经网络层和模块
     ml: 机器学习训练框架
     utils: 工具函数
 
 示例：
-    >>> from tinytorch import Tensor, Variable
+    >>> from tinytorch import NdArray, Tensor
     >>> from tinytorch.nn import Linear, Sequential
     >>> from tinytorch.ml import Model, Trainer
 """
@@ -24,15 +24,15 @@ __version__ = '0.1.0'
 __author__ = 'TinyAI Team'
 
 # 导入核心模块
-from tinytorch import tensor
+from tinytorch import ndarr
 from tinytorch import autograd
 from tinytorch import nn
 from tinytorch import ml
 from tinytorch import utils
 
 # 方便导入常用类
-from tinytorch.tensor import Tensor, Shape
-from tinytorch.autograd import Variable, Function
+from tinytorch.ndarr import NdArray, Shape
+from tinytorch.autograd import Tensor, Function
 
 __all__ = [
     'tensor',
@@ -42,8 +42,8 @@ __all__ = [
     'utils',
     '__version__',
     '__author__',
-    'Tensor',
+    'NdArray',
     'Shape',
-    'Variable',
+    'Tensor',
     'Function',
 ]

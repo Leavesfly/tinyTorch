@@ -63,7 +63,7 @@ class SGD(Optimizer):
             if param.grad is None:
                 continue
             
-            # 获取梯度（grad 是 Tensor 对象）
+            # 获取梯度（grad 是 NdArray 对象）
             grad = param.grad
             
             # 添加权重衰减（L2 正则化）
@@ -76,8 +76,8 @@ class SGD(Optimizer):
             if self.momentum > 0:
                 if self.state[i]['velocity'] is None:
                     # 初始化速度为零
-                    from tinytorch.tensor.tensor import Tensor
-                    self.state[i]['velocity'] = Tensor.zeros(param.value.shape.dims)
+                    from tinytorch.ndarr.ndarray import NdArray
+                    self.state[i]['velocity'] = NdArray.zeros(param.value.shape.dims)
                 
                 velocity = self.state[i]['velocity']
                 

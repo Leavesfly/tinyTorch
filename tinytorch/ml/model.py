@@ -9,7 +9,7 @@ import pickle
 from typing import Optional, Dict, Any, List
 from tinytorch.nn.module import Module
 from tinytorch.nn.parameter import Parameter
-from tinytorch.autograd.variable import Variable
+from tinytorch.autograd.tensor import Tensor
 
 
 class Model:
@@ -49,7 +49,7 @@ class Model:
             'framework': 'tinyTorch'
         }
     
-    def forward(self, input: Variable) -> Variable:
+    def forward(self, input: Tensor) -> Tensor:
         """前向传播。
         
         Args:
@@ -60,7 +60,7 @@ class Model:
         """
         return self.module(input)
     
-    def __call__(self, input: Variable) -> Variable:
+    def __call__(self, input: Tensor) -> Tensor:
         """调用模型，执行前向传播。
         
         Args:
@@ -175,8 +175,8 @@ class Model:
             if name in saved_params:
                 param_data = saved_params[name]
                 # 更新参数值
-                from tinytorch.tensor.tensor import Tensor
-                param.value = Tensor(param_data['value'])
+                from tinytorch.ndarr.ndarray import NdArray
+                param.value = NdArray(param_data['value'])
     
     def __repr__(self) -> str:
         """返回模型的字符串表示。"""

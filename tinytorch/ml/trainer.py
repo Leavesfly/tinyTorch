@@ -10,7 +10,7 @@ from tinytorch.ml.model import Model
 from tinytorch.ml.dataset import DataSet
 from tinytorch.ml.optimizers.optimizer import Optimizer
 from tinytorch.ml.losses.loss import Loss
-from tinytorch.autograd.variable import Variable
+from tinytorch.autograd.tensor import Tensor
 
 
 class Trainer:
@@ -122,9 +122,9 @@ class Trainer:
         num_batches = len(batches)
         
         for batch_idx, (batch_data, batch_labels) in enumerate(batches):
-            # 转换为 Variable
-            input_var = Variable(batch_data, requires_grad=False)
-            target_var = Variable(batch_labels, requires_grad=False)
+            # 转换为 Tensor
+            input_var = Tensor(batch_data, requires_grad=False)
+            target_var = Tensor(batch_labels, requires_grad=False)
             
             # 清除梯度
             self.optimizer.zero_grad()
@@ -172,9 +172,9 @@ class Trainer:
         num_batches = len(batches)
         
         for batch_data, batch_labels in batches:
-            # 转换为 Variable
-            input_var = Variable(batch_data, requires_grad=False)
-            target_var = Variable(batch_labels, requires_grad=False)
+            # 转换为 Tensor
+            input_var = Tensor(batch_data, requires_grad=False)
+            target_var = Tensor(batch_labels, requires_grad=False)
             
             # 前向传播（不需要梯度）
             output = self.model(input_var)

@@ -3,9 +3,9 @@
 Author: TinyAI Team
 """
 
-from tinytorch.autograd.variable import Variable
-from tinytorch.tensor.tensor import Tensor
-from tinytorch.tensor.shape import Shape
+from tinytorch.autograd.tensor import Tensor
+from tinytorch.ndarr.ndarray import NdArray
+from tinytorch.ndarr.shape import Shape
 from tinytorch.ml.losses.loss import Loss
 
 
@@ -23,8 +23,8 @@ class MSELoss(Loss):
     
     Example:
         >>> loss_fn = MSELoss()
-        >>> pred = Variable(Tensor([[1.0, 2.0], [3.0, 4.0]]))
-        >>> target = Variable(Tensor([[1.5, 2.5], [3.5, 4.5]]))
+        >>> pred = Tensor(NdArray([[1.0, 2.0], [3.0, 4.0]]))
+        >>> target = Tensor(NdArray([[1.5, 2.5], [3.5, 4.5]]))
         >>> loss = loss_fn(pred, target)
         >>> print(loss.value.data[0])  # 约为 0.25
     """
@@ -40,7 +40,7 @@ class MSELoss(Loss):
             raise ValueError(f"reduction must be 'mean', 'sum' or 'none', got {reduction}")
         self.reduction = reduction
     
-    def forward(self, pred: Variable, target: Variable) -> Variable:
+    def forward(self, pred: Tensor, target: Tensor) -> Tensor:
         """计算均方误差损失。
         
         Args:

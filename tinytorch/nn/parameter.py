@@ -1,20 +1,20 @@
 """神经网络参数类。
 
-Parameter 是 Variable 的子类，专门用于神经网络的可训练参数。
-与普通 Variable 的主要区别是 requires_grad 默认为 True。
+Parameter 是 Tensor 的子类，专门用于神经网络的可训练参数。
+与普通 Tensor 的主要区别是 requires_grad 默认为 True。
 
 Author: TinyAI Team
 """
 
 from typing import Optional, Dict, Any
-from tinytorch.tensor.tensor import Tensor
-from tinytorch.autograd.variable import Variable
+from tinytorch.ndarr.ndarray import NdArray
+from tinytorch.autograd.tensor import Tensor
 
 
-class Parameter(Variable):
+class Parameter(Tensor):
     """可训练参数类。
     
-    Parameter 是 Variable 的一个特殊子类，用于表示神经网络中的
+    Parameter 是 Tensor 的一个特殊子类，用于表示神经网络中的
     可训练参数（如权重和偏置）。
     
     Attributes:
@@ -25,16 +25,16 @@ class Parameter(Variable):
         creator: 创建该参数的函数（用于构建计算图）
     
     Example:
-        >>> weight = Parameter(Tensor.randn((10, 5)), name='weight')
-        >>> bias = Parameter(Tensor.zeros((5,)), name='bias')
+        >>> weight = Parameter(NdArray.randn((10, 5)), name='weight')
+        >>> bias = Parameter(NdArray.zeros((5,)), name='bias')
         >>> output = input @ weight + bias
     """
     
-    def __init__(self, value: Tensor, name: str = None):
+    def __init__(self, value: NdArray, name: str = None):
         """初始化参数。
         
         Args:
-            value: 参数的初始值（Tensor）
+            value: 参数的初始值（NdArray）
             name: 参数名称，用于调试和可视化
         """
         # 参数默认需要梯度
@@ -73,6 +73,6 @@ class Parameter(Variable):
         Returns:
             Parameter 实例
         """
-        value = Tensor(data['value'])
+        value = NdArray(data['value'])
         name = data.get('name')
         return Parameter(value, name=name)

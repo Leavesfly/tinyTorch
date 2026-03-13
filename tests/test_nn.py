@@ -6,8 +6,8 @@ Author: TinyAI Team
 import pytest
 from tinytorch.nn.layers import Linear, ReLU, LayerNorm, Dropout
 from tinytorch.nn.parameter import Parameter
-from tinytorch.autograd import Variable
-from tinytorch.tensor import Tensor
+from tinytorch.autograd import Tensor
+from tinytorch.ndarr import NdArray
 
 
 class TestLinear:
@@ -23,7 +23,7 @@ class TestLinear:
     def test_linear_forward(self):
         """测试全连接层前向传播。"""
         layer = Linear(3, 2)
-        x = Variable(Tensor([[1.0, 2.0, 3.0]]))
+        x = Tensor(NdArray([[1.0, 2.0, 3.0]]))
         output = layer(x)
         assert output.value.shape.dims[0] == 1
         assert output.value.shape.dims[1] == 2
@@ -35,7 +35,7 @@ class TestActivation:
     def test_relu(self):
         """测试 ReLU 激活。"""
         relu = ReLU()
-        x = Variable(Tensor([-1.0, 0.0, 1.0, 2.0]))
+        x = Tensor(NdArray([-1.0, 0.0, 1.0, 2.0]))
         output = relu(x)
         # ReLU 应该将负数变为0
         assert output.value.data[0] == 0.0
@@ -146,7 +146,7 @@ class TestSequential:
                 ReLU(),
                 Linear(5, 2)
             )
-            x = Variable(Tensor([[1.0, 2.0, 3.0]]))
+            x = Tensor(NdArray([[1.0, 2.0, 3.0]]))
             output = model(x)
             assert output.value.shape.dims[1] == 2
         except ImportError:

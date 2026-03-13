@@ -5,8 +5,8 @@
 Author: TinyAI Team
 """
 
-from tinytorch.tensor import Tensor
-from tinytorch.autograd import Variable
+from tinytorch.ndarr import NdArray
+from tinytorch.autograd import Tensor
 from tinytorch.nn import Module
 from tinytorch.nn.layers import MultiHeadAttention, Linear, LayerNorm, Dropout, Embedding
 from tinytorch.ml import Model, Monitor
@@ -47,7 +47,7 @@ class TransformerBlock(Module):
         self.norm2 = LayerNorm(embed_dim)
         self.dropout2 = Dropout(dropout)
     
-    def forward(self, x: Variable) -> Variable:
+    def forward(self, x: Tensor) -> Tensor:
         """前向传播。
         
         Args:
@@ -70,10 +70,10 @@ class TransformerBlock(Module):
         
         return x
     
-    def _add_residual(self, x: Variable, residual: Variable) -> Variable:
+    def _add_residual(self, x: Tensor, residual: Tensor) -> Tensor:
         """添加残差连接。"""
         result = x.value.add(residual.value)
-        return Variable(result, requires_grad=x.requires_grad)
+        return Tensor(result, requires_grad=x.requires_grad)
 
 
 class FeedForward(Module):
@@ -96,14 +96,14 @@ class FeedForward(Module):
         self.dropout = Dropout(dropout)
         self.fc2 = Linear(ff_dim, embed_dim)
     
-    def forward(self, x: Variable) -> Variable:
+    def forward(self, x: Tensor) -> Tensor:
         """前向传播。"""
         batch_size, seq_len, embed_dim = x.value.shape.dims
         
         # 展平处理
         flat_data = x.value.data
-        flat_tensor = Tensor(flat_data, (batch_size * seq_len, embed_dim), 'float32')
-        flat_var = Variable(flat_tensor, requires_grad=x.requires_grad)
+        flat_tensor = NdArray(flat_data, (batch_size * seq_len, embed_dim), 'float32')
+        flat_var = Tensor(flat_tensor, requires_grad=x.requires_grad)
         
         # 第一层：Linear + ReLU
         h = self.fc1(flat_var)
@@ -115,14 +115,14 @@ class FeedForward(Module):
         
         # 重塑回 (batch_size, seq_len, embed_dim)
         output_data = output.value.data
-        output_tensor = Tensor(output_data, (batch_size, seq_len, embed_dim), 'float32')
+        output_tensor = NdArray(output_data, (batch_size, seq_len, embed_dim), 'float32')
         
-        return Variable(output_tensor, requires_grad=output.requires_grad)
+        return Tensor(output_tensor, requires_grad=output.requires_grad)
     
-    def _apply_relu(self, x: Variable) -> Variable:
+    def _apply_relu(self, x: Tensor) -> Tensor:
         """应用 ReLU 激活。"""
         result = x.value.relu()
-        return Variable(result, requires_grad=x.requires_grad)
+        return Tensor(result, requires_grad=x.requires_grad)
 
 
 class SimpleTransformer(Module):
@@ -161,7 +161,7 @@ class SimpleTransformer(Module):
         # 输出层
         self.output_proj = Linear(embed_dim, vocab_size)
     
-    def forward(self, x: Variable) -> Variable:
+    def forward(self, x: Tensor) -> Tensor:
         """前向传播。
         
         Args:
@@ -182,17 +182,17 @@ class SimpleTransformer(Module):
         
         # 展平处理
         flat_data = x.value.data
-        flat_tensor = Tensor(flat_data, (batch_size * seq_len, embed_dim), 'float32')
-        flat_var = Variable(flat_tensor, requires_grad=x.requires_grad)
+        flat_tensor = NdArray(flat_data, (batch_size * seq_len, embed_dim), 'float32')
+        flat_var = Tensor(flat_tensor, requires_grad=x.requires_grad)
         
         # 输出投影
         output = self.output_proj(flat_var)  # (batch_size * seq_len, vocab_size)
         
         # 重塑
         output_data = output.value.data
-        output_tensor = Tensor(output_data, (batch_size, seq_len, self.vocab_size), 'float32')
+        output_tensor = NdArray(output_data, (batch_size, seq_len, self.vocab_size), 'float32')
         
-        return Variable(output_tensor, requires_grad=output.requires_grad)
+        return Tensor(output_tensor, requires_grad=output.requires_grad)
 
 
 def main():
@@ -239,13 +239,13 @@ def main():
     print(f"  示例序列: {test_seq[0][:5]}...")
     
     # 创建输入张量
-    from tinytorch.tensor import Tensor, Shape
+    from tinytorch.ndarr import NdArray, Shape
     input_data = []
     for seq in test_seq:
         input_data.extend([float(x) for x in seq])
     
-    input_tensor = Tensor(input_data, Shape((batch_size, seq_len)), 'float32')
-    input_var = Variable(input_tensor, requires_grad=False)
+    input_tensor = NdArray(input_data, Shape((batch_size, seq_len)), 'float32')
+    input_var = Tensor(input_tensor, requires_grad=False)
     
     print("\n步骤 4: 前向传播")
     print("注意: 这是一个简化的演示，展示 Transformer 的基本结构")

@@ -6,9 +6,9 @@ Author: TinyAI Team
 from typing import Optional
 from tinytorch.nn.module import Module
 from tinytorch.nn.parameter import Parameter
-from tinytorch.autograd.variable import Variable
-from tinytorch.tensor.tensor import Tensor
-from tinytorch.tensor.shape import Shape
+from tinytorch.autograd.tensor import Tensor
+from tinytorch.ndarr.ndarray import NdArray
+from tinytorch.ndarr.shape import Shape
 from tinytorch.nn import init
 
 
@@ -30,7 +30,7 @@ class Linear(Module):
     
     Example:
         >>> layer = Linear(10, 5)
-        >>> x = Variable(Tensor.randn((32, 10)))
+        >>> x = Tensor(NdArray.randn((32, 10)))
         >>> y = layer(x)
         >>> print(y.value.shape.dims)
         (32, 5)
@@ -53,12 +53,12 @@ class Linear(Module):
         self.use_bias = use_bias
         
         # 初始化权重参数 (out_features, in_features)
-        weight_tensor = Tensor.zeros((out_features, in_features))
+        weight_tensor = NdArray.zeros((out_features, in_features))
         self.weight = Parameter(weight_tensor, name=f'{self.name}.weight')
         
         # 初始化偏置参数 (out_features,)
         if use_bias:
-            bias_tensor = Tensor.zeros((out_features,))
+            bias_tensor = NdArray.zeros((out_features,))
             self.bias = Parameter(bias_tensor, name=f'{self.name}.bias')
         else:
             self.bias = None
@@ -78,7 +78,7 @@ class Linear(Module):
         if self.bias is not None:
             init.zeros_(self.bias.value)
     
-    def forward(self, input: Variable) -> Variable:
+    def forward(self, input: Tensor) -> Tensor:
         """前向传播。
         
         计算: output = input @ weight^T + bias
@@ -105,9 +105,9 @@ class Linear(Module):
                     f"got {in_features}"
                 )
             # reshape 为 2D: (batch_size * seq_len, in_features)
-            flat_tensor = Tensor(input.value.data,
-                                 Shape((batch_size * seq_len, in_features)), 'float32')
-            flat_input = Variable(flat_tensor, requires_grad=input.requires_grad)
+            flat_tensor = NdArray(input.value.data,
+                                  Shape((batch_size * seq_len, in_features)), 'float32')
+            flat_input = Tensor(flat_tensor, requires_grad=input.requires_grad)
             
             # 执行 2D 线性变换
             weight_transposed = self.weight.transpose()
@@ -116,9 +116,9 @@ class Linear(Module):
                 output = output + self.bias
             
             # reshape 回 3D: (batch_size, seq_len, out_features)
-            out_tensor = Tensor(output.value.data,
-                                Shape((batch_size, seq_len, self.out_features)), 'float32')
-            return Variable(out_tensor, requires_grad=output.requires_grad)
+            out_tensor = NdArray(output.value.data,
+                                 Shape((batch_size, seq_len, self.out_features)), 'float32')
+            return Tensor(out_tensor, requires_grad=output.requires_grad)
         
         # 检查输入形状（2D）
         if ndim != 2:

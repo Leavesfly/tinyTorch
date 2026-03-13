@@ -5,8 +5,8 @@
 Author: TinyAI Team
 """
 
-from tinytorch.tensor import Tensor
-from tinytorch.autograd import Variable
+from tinytorch.ndarr import NdArray
+from tinytorch.autograd import Tensor
 from tinytorch.nn import Module
 from tinytorch.nn.layers import LSTM, Linear, Embedding, Dropout
 from tinytorch.ml import Model, DataSet, Adam, CrossEntropyLoss, Monitor
@@ -48,7 +48,7 @@ class LSTMLanguageModel(Module):
         # Dropout（可选）
         self.dropout = Dropout(p=0.1)
     
-    def forward(self, x: Variable) -> Variable:
+    def forward(self, x: Tensor) -> Tensor:
         """前向传播。
         
         Args:
@@ -72,17 +72,17 @@ class LSTMLanguageModel(Module):
         
         # 简化实现：展平处理
         flat_data = lstm_out.value.data
-        flat_tensor = Tensor(flat_data, (batch_size * seq_len, hidden_size), 'float32')
-        flat_var = Variable(flat_tensor, requires_grad=lstm_out.requires_grad)
+        flat_tensor = NdArray(flat_data, (batch_size * seq_len, hidden_size), 'float32')
+        flat_var = Tensor(flat_tensor, requires_grad=lstm_out.requires_grad)
         
         # 通过全连接层
         output = self.fc(flat_var)  # (batch_size * seq_len, vocab_size)
         
         # 重塑回 (batch_size, seq_len, vocab_size)
         output_data = output.value.data
-        output_tensor = Tensor(output_data, (batch_size, seq_len, self.vocab_size), 'float32')
+        output_tensor = NdArray(output_data, (batch_size, seq_len, self.vocab_size), 'float32')
         
-        return Variable(output_tensor, requires_grad=output.requires_grad)
+        return Tensor(output_tensor, requires_grad=output.requires_grad)
 
 
 def generate_toy_sequences(vocab_size=50, seq_len=10, num_samples=100):
@@ -191,16 +191,16 @@ def main():
             for seq in batch_inputs:
                 input_data.extend(seq)
             
-            input_tensor = Tensor(input_data, (actual_batch_size, seq_len), 'float32')
-            input_var = Variable(input_tensor, requires_grad=True)
+            input_tensor = NdArray(input_data, (actual_batch_size, seq_len), 'float32')
+            input_var = Tensor(input_tensor, requires_grad=True)
             
             # 准备目标数据
             target_data = []
             for seq in batch_targets:
                 target_data.extend(seq)
             
-            target_tensor = Tensor(target_data, (actual_batch_size * seq_len,), 'float32')
-            target_var = Variable(target_tensor, requires_grad=False)
+            target_tensor = NdArray(target_data, (actual_batch_size * seq_len,), 'float32')
+            target_var = Tensor(target_tensor, requires_grad=False)
             
             # 前向传播
             optimizer.zero_grad()
@@ -208,8 +208,8 @@ def main():
             
             # 重塑输出以计算损失
             output_flat_data = output.value.data
-            output_flat = Variable(
-                Tensor(output_flat_data, (actual_batch_size * seq_len, vocab_size), 'float32'),
+            output_flat = Tensor(
+                NdArray(output_flat_data, (actual_batch_size * seq_len, vocab_size), 'float32'),
                 requires_grad=output.requires_grad
             )
             
@@ -244,8 +244,8 @@ def main():
     print(f"  种子序列: {seed_seq[:5]}...")
     
     # 创建输入
-    input_tensor = Tensor([float(x) for x in seed_seq], (1, seq_len), 'float32')
-    input_var = Variable(input_tensor, requires_grad=False)
+    input_tensor = NdArray([float(x) for x in seed_seq], (1, seq_len), 'float32')
+    input_var = Tensor(input_tensor, requires_grad=False)
     
     # 前向传播
     output = lstm_model(input_var)

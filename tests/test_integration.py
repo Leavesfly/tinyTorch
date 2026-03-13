@@ -6,8 +6,8 @@ Author: TinyAI Team
 """
 
 import pytest
-from tinytorch.tensor import Tensor
-from tinytorch.autograd import Variable
+from tinytorch.ndarr import NdArray
+from tinytorch.autograd import Tensor
 from tinytorch.nn import Module
 from tinytorch.nn.layers import Linear, ReLU
 from tinytorch.nn.parameter import Parameter
@@ -46,8 +46,8 @@ class TestEndToEnd:
         optimizer = SGD(model.parameters(), lr=0.01)
         
         # 创建训练数据
-        x_train = Variable(Tensor([[1.0, 2.0, 3.0]]))
-        y_train = Variable(Tensor([[0.5, 0.5]]))
+        x_train = Tensor(NdArray([[1.0, 2.0, 3.0]]))
+        y_train = Tensor(NdArray([[0.5, 0.5]]))
         
         # 训练一步
         optimizer.zero_grad()
@@ -71,8 +71,8 @@ class TestEndToEnd:
         optimizer = SGD(model.parameters(), lr=0.01)
         
         # 创建训练数据
-        x_train = Variable(Tensor([[1.0, 2.0]]))
-        y_train = Variable(Tensor([[3.0]]))
+        x_train = Tensor(NdArray([[1.0, 2.0]]))
+        y_train = Tensor(NdArray([[3.0]]))
         
         # 训练多步
         losses = []
@@ -95,7 +95,7 @@ class TestEndToEnd:
         model.eval()
         
         # 进行预测
-        x = Variable(Tensor([[1.0, 2.0, 3.0]]))
+        x = Tensor(NdArray([[1.0, 2.0, 3.0]]))
         y_pred = model(x)
         
         # 验证输出形状
@@ -123,8 +123,8 @@ class TestModelSaving:
         
         # 训练一步
         optimizer = SGD(model.parameters(), lr=0.1)
-        x = Variable(Tensor([[1.0, 2.0]]))
-        y = Variable(Tensor([[1.0]]))
+        x = Tensor(NdArray([[1.0, 2.0]]))
+        y = Tensor(NdArray([[1.0]]))
         
         y_pred = model(x)
         loss_fn = MSELoss()
@@ -132,7 +132,7 @@ class TestModelSaving:
         
         # 手动设置梯度（简化）
         for p in model.parameters():
-            p.grad = Tensor([0.1] * len(p.data))
+            p.grad = NdArray([0.1] * len(p.data))
         
         optimizer.step()
         
@@ -152,7 +152,7 @@ class TestBatchProcessing:
     def test_single_sample(self):
         """测试单样本处理。"""
         model = SimpleModel(input_size=3, hidden_size=5, output_size=2)
-        x = Variable(Tensor([[1.0, 2.0, 3.0]]))
+        x = Tensor(NdArray([[1.0, 2.0, 3.0]]))
         y = model(x)
         assert y.value.shape.dims[0] == 1
         
@@ -160,7 +160,7 @@ class TestBatchProcessing:
         """测试小批量处理。"""
         model = SimpleModel(input_size=3, hidden_size=5, output_size=2)
         # 批量大小为 2
-        x = Variable(Tensor([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]))
+        x = Tensor(NdArray([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]))
         y = model(x)
         assert y.value.shape.dims[0] == 2
 
@@ -202,7 +202,7 @@ class TestGradientFlow:
     def test_gradient_computation(self):
         """测试梯度计算。"""
         # 创建简单的计算图
-        x = Variable(Tensor([2.0]), name="x")
+        x = Tensor(NdArray([2.0]), name="x")
         y = x * x  # y = x^2
         
         # 反向传播
@@ -213,7 +213,7 @@ class TestGradientFlow:
         
     def test_gradient_accumulation(self):
         """测试梯度累积。"""
-        x = Variable(Tensor([1.0]), name="x")
+        x = Tensor(NdArray([1.0]), name="x")
         
         # 第一次计算
         y1 = x * x
@@ -237,7 +237,7 @@ class TestErrorHandling:
         
         # 输入维度不匹配
         try:
-            x = Variable(Tensor([[1.0, 2.0]]))  # 只有2维，应该是3维
+            x = Tensor(NdArray([[1.0, 2.0]]))  # 只有2维，应该是3维
             y = model(x)
             # 如果没有抛出异常，至少应该产生某种错误
         except Exception:

@@ -8,7 +8,7 @@
 
 import math
 from typing import List
-from tinytorch.tensor import Tensor
+from tinytorch.ndarr import NdArray
 from tinytorch.autograd.function import Function
 
 
@@ -19,18 +19,18 @@ class ReLU(Function):
     反向传播：dL/dx = dL/dy * (x > 0)
     """
     
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: NdArray) -> NdArray:
         """ReLU 的前向传播。"""
         self.save_for_backward(x)
         return x.relu()
     
-    def backward(self, grad_output: Tensor) -> List[Tensor]:
+    def backward(self, grad_output: NdArray) -> List[NdArray]:
         """ReLU 的反向传播。"""
         x, = self.get_saved_tensors()
         
         # 梯度在 x > 0 时为 1，否则为 0
         mask_data = [1.0 if val > 0 else 0.0 for val in x.data]
-        mask = Tensor(mask_data, x.shape, x.dtype)
+        mask = NdArray(mask_data, x.shape, x.dtype)
         
         grad_x = grad_output.mul(mask)
         return [grad_x]
@@ -43,18 +43,18 @@ class Sigmoid(Function):
     反向传播：dL/dx = dL/dy * y * (1 - y)
     """
     
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: NdArray) -> NdArray:
         """Sigmoid 的前向传播。"""
         y = x.sigmoid()
         self.save_for_backward(y)
         return y
     
-    def backward(self, grad_output: Tensor) -> List[Tensor]:
+    def backward(self, grad_output: NdArray) -> List[NdArray]:
         """Sigmoid 的反向传播。"""
         y, = self.get_saved_tensors()
         
         # dy/dx = y * (1 - y) 的梯度计算
-        one = Tensor.ones(y.shape, y.dtype)
+        one = NdArray.ones(y.shape, y.dtype)
         grad_x = grad_output.mul(y).mul(one.sub(y))
         return [grad_x]
 
@@ -66,17 +66,17 @@ class Tanh(Function):
     反向传播：dL/dx = dL/dy * (1 - y^2)
     """
     
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: NdArray) -> NdArray:
         """Tanh 的前向传播。"""
         y = x.tanh()
         self.save_for_backward(y)
         return y
     
-    def backward(self, grad_output: Tensor) -> List[Tensor]:
+    def backward(self, grad_output: NdArray) -> List[NdArray]:
         """Tanh 的反向传播。"""
         y, = self.get_saved_tensors()
         
         # dy/dx = 1 - y^2 的梯度计算
-        one = Tensor.ones(y.shape, y.dtype)
+        one = NdArray.ones(y.shape, y.dtype)
         grad_x = grad_output.mul(one.sub(y.pow(2)))
         return [grad_x]

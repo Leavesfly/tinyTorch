@@ -7,7 +7,7 @@
 """
 
 from typing import List
-from tinytorch.tensor import Tensor
+from tinytorch.ndarr import NdArray
 from tinytorch.autograd.function import Function
 
 
@@ -18,11 +18,11 @@ class Add(Function):
     反向传播：dL/dx = dL/dz, dL/dy = dL/dz
     """
     
-    def forward(self, x: Tensor, y: Tensor) -> Tensor:
+    def forward(self, x: NdArray, y: NdArray) -> NdArray:
         """加法的前向传播。"""
         return x.add(y)
     
-    def backward(self, grad_output: Tensor) -> List[Tensor]:
+    def backward(self, grad_output: NdArray) -> List[NdArray]:
         """加法的反向传播。
         
         梯度均等地流向两个输入。
@@ -44,8 +44,8 @@ class Add(Function):
         return [grad_x, grad_y]
     
     @staticmethod
-    def _sum_to_shape(tensor: Tensor, target_shape) -> Tensor:
-        """将 tensor 求和到 target_shape（处理反向传播中的广播）。"""
+    def _sum_to_shape(tensor: NdArray, target_shape) -> NdArray:
+        """将 ndarr 求和到 target_shape（处理反向传播中的广播）。"""
         # 对额外维度求和
         ndim_diff = tensor.shape.ndim - target_shape.ndim
         for _ in range(ndim_diff):
@@ -66,11 +66,11 @@ class Sub(Function):
     反向传播：dL/dx = dL/dz, dL/dy = -dL/dz
     """
     
-    def forward(self, x: Tensor, y: Tensor) -> Tensor:
+    def forward(self, x: NdArray, y: NdArray) -> NdArray:
         """减法的前向传播。"""
         return x.sub(y)
     
-    def backward(self, grad_output: Tensor) -> List[Tensor]:
+    def backward(self, grad_output: NdArray) -> List[NdArray]:
         """减法的反向传播。"""
         x_shape = self.inputs[0].value.shape
         y_shape = self.inputs[1].value.shape
@@ -95,12 +95,12 @@ class Mul(Function):
     反向传播：dL/dx = dL/dz * y, dL/dy = dL/dz * x
     """
     
-    def forward(self, x: Tensor, y: Tensor) -> Tensor:
+    def forward(self, x: NdArray, y: NdArray) -> NdArray:
         """乘法的前向传播。"""
         self.save_for_backward(x, y)
         return x.mul(y)
     
-    def backward(self, grad_output: Tensor) -> List[Tensor]:
+    def backward(self, grad_output: NdArray) -> List[NdArray]:
         """乘法的反向传播。"""
         x, y = self.get_saved_tensors()
         x_shape = self.inputs[0].value.shape
@@ -126,12 +126,12 @@ class Div(Function):
     反向传播：dL/dx = dL/dz / y, dL/dy = -dL/dz * x / y^2
     """
     
-    def forward(self, x: Tensor, y: Tensor) -> Tensor:
+    def forward(self, x: NdArray, y: NdArray) -> NdArray:
         """除法的前向传播。"""
         self.save_for_backward(x, y)
         return x.div(y)
     
-    def backward(self, grad_output: Tensor) -> List[Tensor]:
+    def backward(self, grad_output: NdArray) -> List[NdArray]:
         """除法的反向传播。"""
         x, y = self.get_saved_tensors()
         x_shape = self.inputs[0].value.shape
@@ -157,10 +157,10 @@ class Neg(Function):
     反向传播：dL/dx = -dL/dy
     """
     
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: NdArray) -> NdArray:
         """取负的前向传播。"""
         return x.neg()
     
-    def backward(self, grad_output: Tensor) -> List[Tensor]:
+    def backward(self, grad_output: NdArray) -> List[NdArray]:
         """取负的逆向传播。"""
         return [grad_output.neg()]

@@ -7,7 +7,7 @@ Author: TinyAI Team
 
 from typing import List, Union
 from tinytorch.nn.module import Module
-from tinytorch.autograd.variable import Variable
+from tinytorch.autograd.tensor import Tensor
 
 
 class Sequential(Module):
@@ -25,7 +25,7 @@ class Sequential(Module):
         ...     ReLU(),
         ...     Linear(20, 5)
         ... )
-        >>> x = Variable(Tensor.randn((32, 10)))
+        >>> x = Tensor(NdArray.randn((32, 10)))
         >>> y = model(x)
         >>> print(y.value.shape.dims)
         (32, 5)
@@ -70,7 +70,7 @@ class Sequential(Module):
         
         return self
     
-    def forward(self, input: Variable) -> Variable:
+    def forward(self, input: Tensor) -> Tensor:
         """前向传播。
         
         数据依次通过每个层进行前向传播。

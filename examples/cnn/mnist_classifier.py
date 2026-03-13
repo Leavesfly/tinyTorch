@@ -5,8 +5,8 @@
 Author: TinyAI Team
 """
 
-from tinytorch.tensor import Tensor
-from tinytorch.autograd import Variable
+from tinytorch.ndarr import NdArray
+from tinytorch.autograd import Tensor
 from tinytorch.nn import Sequential, Module
 from tinytorch.nn.layers import Conv2d, Linear, ReLU, Dropout
 from tinytorch.ml import Model, Trainer, DataSet, Adam, CrossEntropyLoss
@@ -47,7 +47,7 @@ class SimpleCNN(Module):
         self.dropout = Dropout(p=0.5)
         self.fc2 = Linear(128, num_classes)
     
-    def forward(self, x: Variable) -> Variable:
+    def forward(self, x: Tensor) -> Tensor:
         """前向传播。
         
         Args:
@@ -66,8 +66,8 @@ class SimpleCNN(Module):
         # 展平
         batch_size = x.value.shape.dims[0]
         flat_data = x.value.data
-        flat_tensor = Tensor(flat_data, (batch_size, self.flatten_size), 'float32')
-        x = Variable(flat_tensor, requires_grad=x.requires_grad)
+        flat_tensor = NdArray(flat_data, (batch_size, self.flatten_size), 'float32')
+        x = Tensor(flat_tensor, requires_grad=x.requires_grad)
         
         # 全连接层
         x = self.fc1(x)
@@ -180,12 +180,12 @@ def main():
                 reshaped_data.extend(batch_data[i])
             
             # 创建输入张量
-            input_tensor = Tensor(reshaped_data, (actual_batch_size, 1, image_size, image_size), 'float32')
-            input_var = Variable(input_tensor, requires_grad=True)
+            input_tensor = NdArray(reshaped_data, (actual_batch_size, 1, image_size, image_size), 'float32')
+            input_var = Tensor(input_tensor, requires_grad=True)
             
             # 创建标签张量
-            label_tensor = Tensor(batch_labels, (actual_batch_size,), 'float32')
-            label_var = Variable(label_tensor, requires_grad=False)
+            label_tensor = NdArray(batch_labels, (actual_batch_size,), 'float32')
+            label_var = Tensor(label_tensor, requires_grad=False)
             
             # 前向传播
             optimizer.zero_grad()
@@ -228,8 +228,8 @@ def main():
         for i in range(actual_batch_size):
             reshaped_data.extend(batch_data[i])
         
-        input_tensor = Tensor(reshaped_data, (actual_batch_size, 1, image_size, image_size), 'float32')
-        input_var = Variable(input_tensor, requires_grad=False)
+        input_tensor = NdArray(reshaped_data, (actual_batch_size, 1, image_size, image_size), 'float32')
+        input_var = Tensor(input_tensor, requires_grad=False)
         
         # 前向传播
         output = cnn(input_var)

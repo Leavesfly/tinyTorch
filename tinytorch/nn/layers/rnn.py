@@ -6,8 +6,8 @@ Author: TinyAI Team
 import math
 from tinytorch.nn.module import Module
 from tinytorch.nn.parameter import Parameter
-from tinytorch.autograd import Variable
-from tinytorch.tensor import Tensor, Shape
+from tinytorch.autograd import Tensor
+from tinytorch.ndarr import NdArray, Shape
 from tinytorch.nn import init
 
 
@@ -26,7 +26,7 @@ class RNN(Module):
     
     Example:
         >>> rnn = RNN(input_size=10, hidden_size=20)
-        >>> x = Variable(Tensor.randn((batch_size, seq_len, 10)))
+        >>> x = Tensor(NdArray.randn((batch_size, seq_len, 10)))
         >>> h = rnn(x)
         >>> print(h.value.shape)
         (batch_size, seq_len, 20)
@@ -65,7 +65,7 @@ class RNN(Module):
         else:
             self.bias = None
     
-    def forward(self, input: Variable, h_0: Variable = None) -> Variable:
+    def forward(self, input: Tensor, h_0: Tensor = None) -> Tensor:
         """前向传播。
         
         Args:
@@ -84,7 +84,7 @@ class RNN(Module):
         
         # 初始化隐藏状态
         if h_0 is None:
-            h_t = Variable(Tensor.zeros((batch_size, self.hidden_size)), requires_grad=False)
+            h_t = Tensor(NdArray.zeros((batch_size, self.hidden_size)), requires_grad=False)
         else:
             h_t = h_0
         
@@ -99,8 +99,8 @@ class RNN(Module):
                     idx = b * seq_len * input_size + t * input_size + i
                     x_t_data.append(input.value.data[idx])
             
-            x_t = Variable(
-                Tensor(x_t_data, Shape((batch_size, input_size)), 'float32'),
+            x_t = Tensor(
+                NdArray(x_t_data, Shape((batch_size, input_size)), 'float32'),
                 requires_grad=input.requires_grad
             )
             
@@ -117,11 +117,11 @@ class RNN(Module):
                     output_data.append(outputs[t].value.data[idx])
         
         output_shape = Shape((batch_size, seq_len, self.hidden_size))
-        output_tensor = Tensor(output_data, output_shape, 'float32')
+        output_tensor = NdArray(output_data, output_shape, 'float32')
         
-        return Variable(output_tensor, requires_grad=input.requires_grad)
+        return Tensor(output_tensor, requires_grad=input.requires_grad)
     
-    def _cell_forward(self, x_t: Variable, h_prev: Variable) -> Variable:
+    def _cell_forward(self, x_t: Tensor, h_prev: Tensor) -> Tensor:
         """单个 RNN 单元的前向传播。
         
         Args:
@@ -149,7 +149,7 @@ class RNN(Module):
         
         return h_t
     
-    def _matmul(self, x: Variable, weight: Parameter, transpose_weight: bool = False) -> Variable:
+    def _matmul(self, x: Tensor, weight: Parameter, transpose_weight: bool = False) -> Tensor:
         """矩阵乘法辅助函数。"""
         if transpose_weight:
             # x @ weight.T
@@ -158,14 +158,14 @@ class RNN(Module):
             w_t = weight.value
         
         result = x.value.matmul(w_t)
-        return Variable(result, requires_grad=x.requires_grad)
+        return Tensor(result, requires_grad=x.requires_grad)
     
-    def _add_variables(self, a: Variable, b: Variable) -> Variable:
-        """Variable 相加。"""
+    def _add_variables(self, a: Tensor, b: Tensor) -> Tensor:
+        """Tensor 相加。"""
         result = a.value.add(b.value)
-        return Variable(result, requires_grad=(a.requires_grad or b.requires_grad))
+        return Tensor(result, requires_grad=(a.requires_grad or b.requires_grad))
     
-    def _add_bias(self, x: Variable, bias: Parameter) -> Variable:
+    def _add_bias(self, x: Tensor, bias: Parameter) -> Tensor:
         """添加偏置（广播）。"""
         # x: (batch_size, hidden_size), bias: (hidden_size,)
         batch_size, hidden_size = x.value.shape.dims
@@ -176,13 +176,13 @@ class RNN(Module):
                 idx = b * hidden_size + h
                 result_data.append(x.value.data[idx] + bias.value.data[h])
         
-        result_tensor = Tensor(result_data, x.value.shape, 'float32')
-        return Variable(result_tensor, requires_grad=x.requires_grad)
+        result_tensor = NdArray(result_data, x.value.shape, 'float32')
+        return Tensor(result_tensor, requires_grad=x.requires_grad)
     
-    def _apply_tanh(self, x: Variable) -> Variable:
+    def _apply_tanh(self, x: Tensor) -> Tensor:
         """应用 tanh 激活函数。"""
         result = x.value.tanh()
-        return Variable(result, requires_grad=x.requires_grad)
+        return Tensor(result, requires_grad=x.requires_grad)
     
     def __repr__(self) -> str:
         """返回层的字符串表示。"""
@@ -210,7 +210,7 @@ class LSTM(Module):
     
     Example:
         >>> lstm = LSTM(input_size=10, hidden_size=20)
-        >>> x = Variable(Tensor.randn((batch_size, seq_len, 10)))
+        >>> x = Tensor(NdArray.randn((batch_size, seq_len, 10)))
         >>> h, c = lstm(x)
         >>> print(h.value.shape, c.value.shape)
         (batch_size, seq_len, 20) (batch_size, 20)
@@ -256,7 +256,7 @@ class LSTM(Module):
         else:
             self.b_i = self.b_f = self.b_g = self.b_o = None
     
-    def forward(self, input: Variable, states=None):
+    def forward(self, input: Tensor, states=None):
         """前向传播。
         
         Args:
@@ -270,8 +270,8 @@ class LSTM(Module):
         
         # 初始化状态
         if states is None:
-            h_t = Variable(Tensor.zeros((batch_size, self.hidden_size)), requires_grad=False)
-            c_t = Variable(Tensor.zeros((batch_size, self.hidden_size)), requires_grad=False)
+            h_t = Tensor(NdArray.zeros((batch_size, self.hidden_size)), requires_grad=False)
+            c_t = Tensor(NdArray.zeros((batch_size, self.hidden_size)), requires_grad=False)
         else:
             h_t, c_t = states
         
@@ -285,8 +285,8 @@ class LSTM(Module):
                     idx = b * seq_len * input_size + t * input_size + i
                     x_t_data.append(input.value.data[idx])
             
-            x_t = Variable(
-                Tensor(x_t_data, Shape((batch_size, input_size)), 'float32'),
+            x_t = Tensor(
+                NdArray(x_t_data, Shape((batch_size, input_size)), 'float32'),
                 requires_grad=input.requires_grad
             )
             
@@ -303,11 +303,11 @@ class LSTM(Module):
                     output_data.append(outputs[t].value.data[idx])
         
         output_shape = Shape((batch_size, seq_len, self.hidden_size))
-        output_tensor = Tensor(output_data, output_shape, 'float32')
+        output_tensor = NdArray(output_data, output_shape, 'float32')
         
-        return Variable(output_tensor, requires_grad=input.requires_grad), c_t
+        return Tensor(output_tensor, requires_grad=input.requires_grad), c_t
     
-    def _cell_forward(self, x_t: Variable, h_prev: Variable, c_prev: Variable):
+    def _cell_forward(self, x_t: Tensor, h_prev: Tensor, c_prev: Tensor):
         """LSTM 单元前向传播。"""
         # 输入门
         i_t = self._gate(x_t, h_prev, self.W_ii, self.W_hi, self.b_i, activation='sigmoid')
@@ -329,8 +329,8 @@ class LSTM(Module):
         
         return h_t, c_t
     
-    def _gate(self, x_t: Variable, h_prev: Variable, W_i: Parameter, 
-              W_h: Parameter, bias: Parameter, activation: str) -> Variable:
+    def _gate(self, x_t: Tensor, h_prev: Tensor, W_i: Parameter,
+              W_h: Parameter, bias: Parameter, activation: str) -> Tensor:
         """计算门控值。"""
         # W_i @ x_t + W_h @ h_prev + bias
         result = self._linear(x_t, W_i, transpose=True)
@@ -346,21 +346,21 @@ class LSTM(Module):
         else:
             return result
     
-    def _linear(self, x: Variable, weight: Parameter, transpose: bool = False) -> Variable:
+    def _linear(self, x: Tensor, weight: Parameter, transpose: bool = False) -> Tensor:
         """线性变换。"""
         if transpose:
             w = weight.value.transpose()
         else:
             w = weight.value
         result = x.value.matmul(w)
-        return Variable(result, requires_grad=x.requires_grad)
+        return Tensor(result, requires_grad=x.requires_grad)
     
-    def _add_variables(self, a: Variable, b: Variable) -> Variable:
-        """Variable 相加。"""
+    def _add_variables(self, a: Tensor, b: Tensor) -> Tensor:
+        """Tensor 相加。"""
         result = a.value.add(b.value)
-        return Variable(result, requires_grad=(a.requires_grad or b.requires_grad))
+        return Tensor(result, requires_grad=(a.requires_grad or b.requires_grad))
     
-    def _add_bias(self, x: Variable, bias: Parameter) -> Variable:
+    def _add_bias(self, x: Tensor, bias: Parameter) -> Tensor:
         """添加偏置。"""
         batch_size, hidden_size = x.value.shape.dims
         result_data = []
@@ -368,37 +368,37 @@ class LSTM(Module):
             for h in range(hidden_size):
                 idx = b * hidden_size + h
                 result_data.append(x.value.data[idx] + bias.value.data[h])
-        result_tensor = Tensor(result_data, x.value.shape, 'float32')
-        return Variable(result_tensor, requires_grad=x.requires_grad)
+        result_tensor = NdArray(result_data, x.value.shape, 'float32')
+        return Tensor(result_tensor, requires_grad=x.requires_grad)
     
-    def _apply_sigmoid(self, x: Variable) -> Variable:
+    def _apply_sigmoid(self, x: Tensor) -> Tensor:
         """Sigmoid 激活。"""
         result = x.value.sigmoid()
-        return Variable(result, requires_grad=x.requires_grad)
+        return Tensor(result, requires_grad=x.requires_grad)
     
-    def _apply_tanh(self, x: Variable) -> Variable:
+    def _apply_tanh(self, x: Tensor) -> Tensor:
         """Tanh 激活。"""
         result = x.value.tanh()
-        return Variable(result, requires_grad=x.requires_grad)
+        return Tensor(result, requires_grad=x.requires_grad)
     
-    def _update_cell(self, f_t: Variable, c_prev: Variable, 
-                     i_t: Variable, g_t: Variable) -> Variable:
+    def _update_cell(self, f_t: Tensor, c_prev: Tensor,
+                     i_t: Tensor, g_t: Tensor) -> Tensor:
         """更新单元状态：c_t = f_t * c_prev + i_t * g_t"""
         fc = self._mul_variables(f_t, c_prev)
         ig = self._mul_variables(i_t, g_t)
         c_t = self._add_variables(fc, ig)
         return c_t
     
-    def _update_hidden(self, o_t: Variable, c_t: Variable) -> Variable:
+    def _update_hidden(self, o_t: Tensor, c_t: Tensor) -> Tensor:
         """更新隐藏状态：h_t = o_t * tanh(c_t)"""
         tanh_c = self._apply_tanh(c_t)
         h_t = self._mul_variables(o_t, tanh_c)
         return h_t
     
-    def _mul_variables(self, a: Variable, b: Variable) -> Variable:
+    def _mul_variables(self, a: Tensor, b: Tensor) -> Tensor:
         """逐元素相乘。"""
         result = a.value.mul(b.value)
-        return Variable(result, requires_grad=(a.requires_grad or b.requires_grad))
+        return Tensor(result, requires_grad=(a.requires_grad or b.requires_grad))
     
     def __repr__(self) -> str:
         """返回层的字符串表示。"""
@@ -424,7 +424,7 @@ class GRU(Module):
     
     Example:
         >>> gru = GRU(input_size=10, hidden_size=20)
-        >>> x = Variable(Tensor.randn((batch_size, seq_len, 10)))
+        >>> x = Tensor(NdArray.randn((batch_size, seq_len, 10)))
         >>> h = gru(x)
         >>> print(h.value.shape)
         (batch_size, seq_len, 20)
@@ -465,13 +465,13 @@ class GRU(Module):
         else:
             self.b_r = self.b_z = self.b_n = None
     
-    def forward(self, input: Variable, h_0: Variable = None) -> Variable:
+    def forward(self, input: Tensor, h_0: Tensor = None) -> Tensor:
         """前向传播（实现简化版本，与 RNN 类似）。"""
         # 简化实现，参考 RNN 和 LSTM 的模式
         batch_size, seq_len, input_size = input.value.shape.dims
         
         if h_0 is None:
-            h_t = Variable(Tensor.zeros((batch_size, self.hidden_size)), requires_grad=False)
+            h_t = Tensor(NdArray.zeros((batch_size, self.hidden_size)), requires_grad=False)
         else:
             h_t = h_0
         
@@ -484,8 +484,8 @@ class GRU(Module):
                     idx = b * seq_len * input_size + t * input_size + i
                     x_t_data.append(input.value.data[idx])
             
-            x_t = Variable(
-                Tensor(x_t_data, Shape((batch_size, input_size)), 'float32'),
+            x_t = Tensor(
+                NdArray(x_t_data, Shape((batch_size, input_size)), 'float32'),
                 requires_grad=input.requires_grad
             )
             
@@ -501,11 +501,11 @@ class GRU(Module):
                     output_data.append(outputs[t].value.data[idx])
         
         output_shape = Shape((batch_size, seq_len, self.hidden_size))
-        output_tensor = Tensor(output_data, output_shape, 'float32')
+        output_tensor = NdArray(output_data, output_shape, 'float32')
         
-        return Variable(output_tensor, requires_grad=input.requires_grad)
+        return Tensor(output_tensor, requires_grad=input.requires_grad)
     
-    def _cell_forward(self, x_t: Variable, h_prev: Variable) -> Variable:
+    def _cell_forward(self, x_t: Tensor, h_prev: Tensor) -> Tensor:
         """GRU 单元前向传播（简化实现）。"""
         # 重置门
         r_t = self._gate(x_t, h_prev, self.W_ir, self.W_hr, self.b_r, 'sigmoid')
@@ -521,8 +521,8 @@ class GRU(Module):
         
         return h_t
     
-    def _gate(self, x_t: Variable, h_prev: Variable, W_i: Parameter, 
-              W_h: Parameter, bias: Parameter, activation: str) -> Variable:
+    def _gate(self, x_t: Tensor, h_prev: Tensor, W_i: Parameter,
+              W_h: Parameter, bias: Parameter, activation: str) -> Tensor:
         """计算门控值。"""
         result = self._linear(x_t, W_i, True)
         result = self._add_variables(result, self._linear(h_prev, W_h, True))
@@ -533,18 +533,18 @@ class GRU(Module):
         else:
             return self._apply_tanh(result)
     
-    def _linear(self, x: Variable, weight: Parameter, transpose: bool) -> Variable:
+    def _linear(self, x: Tensor, weight: Parameter, transpose: bool) -> Tensor:
         """线性变换。"""
         w = weight.value.transpose() if transpose else weight.value
         result = x.value.matmul(w)
-        return Variable(result, requires_grad=x.requires_grad)
+        return Tensor(result, requires_grad=x.requires_grad)
     
-    def _add_variables(self, a: Variable, b: Variable) -> Variable:
+    def _add_variables(self, a: Tensor, b: Tensor) -> Tensor:
         """变量相加。"""
         result = a.value.add(b.value)
-        return Variable(result, requires_grad=(a.requires_grad or b.requires_grad))
+        return Tensor(result, requires_grad=(a.requires_grad or b.requires_grad))
     
-    def _add_bias(self, x: Variable, bias: Parameter) -> Variable:
+    def _add_bias(self, x: Tensor, bias: Parameter) -> Tensor:
         """添加偏置。"""
         batch_size, hidden_size = x.value.shape.dims
         result_data = []
@@ -552,20 +552,20 @@ class GRU(Module):
             for h in range(hidden_size):
                 idx = b * hidden_size + h
                 result_data.append(x.value.data[idx] + bias.value.data[h])
-        result_tensor = Tensor(result_data, x.value.shape, 'float32')
-        return Variable(result_tensor, requires_grad=x.requires_grad)
+        result_tensor = NdArray(result_data, x.value.shape, 'float32')
+        return Tensor(result_tensor, requires_grad=x.requires_grad)
     
-    def _apply_sigmoid(self, x: Variable) -> Variable:
+    def _apply_sigmoid(self, x: Tensor) -> Tensor:
         """Sigmoid 激活。"""
         result = x.value.sigmoid()
-        return Variable(result, requires_grad=x.requires_grad)
+        return Tensor(result, requires_grad=x.requires_grad)
     
-    def _apply_tanh(self, x: Variable) -> Variable:
+    def _apply_tanh(self, x: Tensor) -> Tensor:
         """Tanh 激活。"""
         result = x.value.tanh()
-        return Variable(result, requires_grad=x.requires_grad)
+        return Tensor(result, requires_grad=x.requires_grad)
     
-    def _gru_update(self, z_t: Variable, n_t: Variable, h_prev: Variable) -> Variable:
+    def _gru_update(self, z_t: Tensor, n_t: Tensor, h_prev: Tensor) -> Tensor:
         """GRU 状态更新。"""
         # (1 - z_t) * n_t + z_t * h_prev
         batch_size, hidden_size = z_t.value.shape.dims
@@ -578,8 +578,8 @@ class GRU(Module):
                 h_val = h_prev.value.data[idx]
                 result_data.append((1.0 - z_val) * n_val + z_val * h_val)
         
-        result_tensor = Tensor(result_data, Shape((batch_size, hidden_size)), 'float32')
-        return Variable(result_tensor, requires_grad=True)
+        result_tensor = NdArray(result_data, Shape((batch_size, hidden_size)), 'float32')
+        return Tensor(result_tensor, requires_grad=True)
     
     def __repr__(self) -> str:
         """返回层的字符串表示。"""

@@ -5,9 +5,9 @@ Author: TinyAI Team
 
 from tinytorch.nn.module import Module
 from tinytorch.nn.parameter import Parameter
-from tinytorch.autograd.variable import Variable
-from tinytorch.tensor.tensor import Tensor
-from tinytorch.tensor.shape import Shape
+from tinytorch.autograd.tensor import Tensor
+from tinytorch.ndarr.ndarray import NdArray
+from tinytorch.ndarr.shape import Shape
 from tinytorch.nn import init
 import random
 
@@ -27,7 +27,7 @@ class LayerNorm(Module):
     
     Example:
         >>> layer_norm = LayerNorm((10,))
-        >>> x = Variable(Tensor.randn((32, 10)))
+        >>> x = Tensor(NdArray.randn((32, 10)))
         >>> y = layer_norm(x)
     """
     
@@ -52,16 +52,16 @@ class LayerNorm(Module):
         
         if elementwise_affine:
             # gamma 参数（缩放）
-            self.weight = Parameter(Tensor.ones(normalized_shape), 
-                                   name=f'{self.name}.weight')
+            self.weight = Parameter(NdArray.ones(normalized_shape),
+                                    name=f'{self.name}.weight')
             # beta 参数（偏移）
-            self.bias = Parameter(Tensor.zeros(normalized_shape), 
-                                 name=f'{self.name}.bias')
+            self.bias = Parameter(NdArray.zeros(normalized_shape),
+                                  name=f'{self.name}.bias')
         else:
             self.weight = None
             self.bias = None
     
-    def forward(self, input: Variable) -> Variable:
+    def forward(self, input: Tensor) -> Tensor:
         """前向传播。
         
         Args:
@@ -78,7 +78,7 @@ class LayerNorm(Module):
         variance = (diff * diff).mean()
         
         # 归一化: (x - mean) / sqrt(var + eps)
-        std = (variance + Variable(Tensor([self.eps]), requires_grad=False)).sqrt()
+        std = (variance + Tensor(NdArray([self.eps]), requires_grad=False)).sqrt()
         normalized = diff / std
         
         # 应用仿射变换
@@ -106,7 +106,7 @@ class Dropout(Module):
     
     Example:
         >>> dropout = Dropout(p=0.5)
-        >>> x = Variable(Tensor.randn((32, 10)))
+        >>> x = Tensor(NdArray.randn((32, 10)))
         >>> y = dropout(x)
     """
     
@@ -124,7 +124,7 @@ class Dropout(Module):
         
         self.p = p
     
-    def forward(self, input: Variable) -> Variable:
+    def forward(self, input: Tensor) -> Tensor:
         """前向传播。
         
         Args:
@@ -150,8 +150,8 @@ class Dropout(Module):
                 # 缩放以保持期望值不变
                 mask_data.append(1.0 / (1.0 - self.p))
         
-        mask = Tensor(mask_data, input.value.shape, input.value.dtype)
-        mask_var = Variable(mask, requires_grad=False)
+        mask = NdArray(mask_data, input.value.shape, input.value.dtype)
+        mask_var = Tensor(mask, requires_grad=False)
         
         return input * mask_var
     
@@ -172,7 +172,7 @@ class Embedding(Module):
     Example:
         >>> embedding = Embedding(num_embeddings=1000, embedding_dim=128)
         >>> # 输入是词索引
-        >>> indices = Variable(Tensor([[1, 2, 3], [4, 5, 6]]))
+        >>> indices = Tensor(NdArray([[1, 2, 3], [4, 5, 6]]))
         >>> embedded = embedding(indices)
         >>> # 输出形状: (2, 3, 128)
     """
@@ -195,7 +195,7 @@ class Embedding(Module):
         
         # 初始化嵌入矩阵 (num_embeddings, embedding_dim)
         self.weight = Parameter(
-            Tensor.randn((num_embeddings, embedding_dim)),
+            NdArray.randn((num_embeddings, embedding_dim)),
             name=f'{self.name}.weight'
         )
         
@@ -207,7 +207,7 @@ class Embedding(Module):
             for j in range(embedding_dim):
                 self.weight.value.data[padding_idx * embedding_dim + j] = 0.0
     
-    def forward(self, input: Variable) -> Variable:
+    def forward(self, input: Tensor) -> Tensor:
         """前向传播。
         
         Args:
@@ -239,8 +239,8 @@ class Embedding(Module):
             end = start + self.embedding_dim
             output_data.extend(self.weight.value.data[start:end])
         
-        output_tensor = Tensor(output_data, output_shape, 'float32')
-        return Variable(output_tensor, requires_grad=input.requires_grad)
+        output_tensor = NdArray(output_data, output_shape, 'float32')
+        return Tensor(output_tensor, requires_grad=input.requires_grad)
     
     def __repr__(self) -> str:
         return (f"{self.__class__.__name__}(num_embeddings={self.num_embeddings}, "

@@ -15,36 +15,36 @@ pip install -e .
 
 ## 核心概念
 
-### 1. Tensor（张量）
+### 1. NdArray（张量）
 
-Tensor 是 tinyTorch 的基础数据结构，类似于多维数组。
+NdArray 是 tinyTorch 的基础数据结构，类似于多维数组。
 
 ```python
-from tinytorch import Tensor
+from tinytorch import NdArray
 
 # 创建张量
-a = Tensor([1, 2, 3, 4])          # 一维张量
-b = Tensor([[1, 2], [3, 4]])      # 二维张量
+a = NdArray([1, 2, 3, 4])  # 一维张量
+b = NdArray([[1, 2], [3, 4]])  # 二维张量
 
 # 工厂方法
-zeros = Tensor.zeros((2, 3))      # 全零张量
-ones = Tensor.ones((3, 2))        # 全一张量
-randn = Tensor.randn((2, 2))      # 随机张量
+zeros = NdArray.zeros((2, 3))  # 全零张量
+ones = NdArray.ones((3, 2))  # 全一张量
+randn = NdArray.randn((2, 2))  # 随机张量
 
 # 查看形状
-print(a.shape.dims)               # (4,)
-print(b.shape.dims)               # (2, 2)
+print(a.shape.dims)  # (4,)
+print(b.shape.dims)  # (2, 2)
 ```
 
-### 2. Variable（变量）
+### 2. Tensor（变量）
 
-Variable 是带有梯度信息的张量，用于自动微分。
+Tensor 是带有梯度信息的张量，用于自动微分。
 
 ```python
-from tinytorch import Variable, Tensor
+from tinytorch import Tensor, NdArray
 
 # 创建变量
-x = Variable(Tensor([1.0, 2.0, 3.0]), name="x")
+x = Tensor(NdArray([1.0, 2.0, 3.0]), name="x")
 
 # 计算
 y = x * 2 + 1
@@ -110,7 +110,7 @@ trainer.train()
 ## 完整示例：线性回归
 
 ```python
-from tinytorch import Tensor, Variable
+from tinytorch import NdArray, Tensor
 from tinytorch.nn import Module, Linear
 from tinytorch.ml import Model, Trainer, DataSet
 from tinytorch.ml.optimizers import SGD
@@ -121,14 +121,16 @@ X_train = [[1.0], [2.0], [3.0], [4.0]]
 y_train = [[2.0], [4.0], [6.0], [8.0]]
 train_data = DataSet(X_train, y_train)
 
+
 # 2. 定义模型
 class LinearRegression(Module):
     def __init__(self):
         super().__init__()
         self.linear = Linear(1, 1)
-    
+
     def forward(self, x):
         return self.linear(x)
+
 
 # 3. 创建模型和训练器
 model = Model("linear_regression", LinearRegression())
@@ -148,7 +150,7 @@ trainer = Trainer(
 trainer.train()
 
 # 5. 预测
-x_test = Variable(Tensor([[5.0]]))
+x_test = Tensor(NdArray([[5.0]]))
 y_pred = model(x_test)
 print(f"预测结果: {y_pred.value.data}")
 ```

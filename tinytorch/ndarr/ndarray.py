@@ -1,6 +1,6 @@
 """多维数组张量类。
 
-本模块提供核心的 Tensor 类，表示多维数组并支持各种数学运算。
+本模块提供核心的 NdArray 类，表示多维数组并支持各种数学运算。
 
 Author: TinyAI Team
 Version: 0.1.0
@@ -9,10 +9,10 @@ Version: 0.1.0
 import math
 import random
 from typing import Union, List, Tuple, Any
-from tinytorch.tensor.shape import Shape
+from tinytorch.ndarr.shape import Shape
 
 
-class Tensor:
+class NdArray:
     """多维数组类，支持各种运算操作。
     
     Tensor 使用扁平列表存储数据（行优先布局），依赖 Shape 进行维度管理。
@@ -24,10 +24,10 @@ class Tensor:
         dtype: 数据类型（'float32' 或 'int32'）
     
     Example:
-        >>> t = Tensor([[1, 2], [3, 4]])
+        >>> t = NdArray([[1, 2], [3, 4]])
         >>> print(t.shape)
         (2, 2)
-        >>> t2 = t.add(Tensor([[1, 1], [1, 1]]))
+        >>> t2 = t.add(NdArray([[1, 1], [1, 1]]))
         >>> print(t2.data)
         [2.0, 3.0, 4.0, 5.0]
     """
@@ -109,7 +109,7 @@ class Tensor:
     # ==================== 工厂方法 ====================
     
     @staticmethod
-    def zeros(shape: Union[Tuple[int, ...], Shape], dtype: str = 'float32') -> 'Tensor':
+    def zeros(shape: Union[Tuple[int, ...], Shape], dtype: str = 'float32') -> 'NdArray':
         """创建全零张量。
         
         Args:
@@ -120,17 +120,17 @@ class Tensor:
             全零张量
             
         Example:
-            >>> t = Tensor.zeros((2, 3))
+            >>> t = NdArray.zeros((2, 3))
             >>> print(t.shape)
             (2, 3)
         """
         if isinstance(shape, tuple):
             shape = Shape(shape)
         data = [0.0 if dtype == 'float32' else 0] * shape.size
-        return Tensor(data, shape, dtype)
+        return NdArray(data, shape, dtype)
     
     @staticmethod
-    def ones(shape: Union[Tuple[int, ...], Shape], dtype: str = 'float32') -> 'Tensor':
+    def ones(shape: Union[Tuple[int, ...], Shape], dtype: str = 'float32') -> 'NdArray':
         """创建全一张量。
         
         Args:
@@ -143,10 +143,10 @@ class Tensor:
         if isinstance(shape, tuple):
             shape = Shape(shape)
         data = [1.0 if dtype == 'float32' else 1] * shape.size
-        return Tensor(data, shape, dtype)
+        return NdArray(data, shape, dtype)
     
     @staticmethod
-    def randn(shape: Union[Tuple[int, ...], Shape], seed: int = None, dtype: str = 'float32') -> 'Tensor':
+    def randn(shape: Union[Tuple[int, ...], Shape], seed: int = None, dtype: str = 'float32') -> 'NdArray':
         """创建服从标准正态分布的随机张量。
         
         Args:
@@ -171,11 +171,11 @@ class Tensor:
             z0 = math.sqrt(-2.0 * math.log(u1)) * math.cos(2.0 * math.pi * u2)
             data.append(float(z0) if dtype == 'float32' else int(z0))
         
-        return Tensor(data, shape, dtype)
+        return NdArray(data, shape, dtype)
     
     @staticmethod
     def uniform(low: float, high: float, shape: Union[Tuple[int, ...], Shape], 
-                seed: int = None, dtype: str = 'float32') -> 'Tensor':
+                seed: int = None, dtype: str = 'float32') -> 'NdArray':
         """创建服从均匀分布的随机张量。
         
         Args:
@@ -198,11 +198,11 @@ class Tensor:
         if dtype == 'int32':
             data = [int(x) for x in data]
         
-        return Tensor(data, shape, dtype)
+        return NdArray(data, shape, dtype)
     
     # ==================== 基本运算 ====================
     
-    def add(self, other: Union['Tensor', float, int]) -> 'Tensor':
+    def add(self, other: Union['NdArray', float, int]) -> 'NdArray':
         """逐元素加法。
         
         Args:
@@ -213,15 +213,15 @@ class Tensor:
         """
         if isinstance(other, (int, float)):
             result_data = [x + other for x in self.data]
-            return Tensor(result_data, self.shape, self.dtype)
+            return NdArray(result_data, self.shape, self.dtype)
         
-        if not isinstance(other, Tensor):
+        if not isinstance(other, NdArray):
             raise TypeError(f"Unsupported type for add: {type(other)}")
         
         # 处理广播
         if self.shape == other.shape:
             result_data = [x + y for x, y in zip(self.data, other.data)]
-            return Tensor(result_data, self.shape, self.dtype)
+            return NdArray(result_data, self.shape, self.dtype)
         
         # 广播情况
         broadcast_shape = self.shape.broadcast_with(other.shape)
@@ -229,57 +229,57 @@ class Tensor:
         t2_broadcast = other._broadcast_to(broadcast_shape)
         
         result_data = [x + y for x, y in zip(t1_broadcast.data, t2_broadcast.data)]
-        return Tensor(result_data, broadcast_shape, self.dtype)
+        return NdArray(result_data, broadcast_shape, self.dtype)
     
-    def sub(self, other: Union['Tensor', float, int]) -> 'Tensor':
+    def sub(self, other: Union['NdArray', float, int]) -> 'NdArray':
         """逐元素减法。"""
         if isinstance(other, (int, float)):
             result_data = [x - other for x in self.data]
-            return Tensor(result_data, self.shape, self.dtype)
+            return NdArray(result_data, self.shape, self.dtype)
         
-        if not isinstance(other, Tensor):
+        if not isinstance(other, NdArray):
             raise TypeError(f"Unsupported type for sub: {type(other)}")
         
         if self.shape == other.shape:
             result_data = [x - y for x, y in zip(self.data, other.data)]
-            return Tensor(result_data, self.shape, self.dtype)
+            return NdArray(result_data, self.shape, self.dtype)
         
         broadcast_shape = self.shape.broadcast_with(other.shape)
         t1_broadcast = self._broadcast_to(broadcast_shape)
         t2_broadcast = other._broadcast_to(broadcast_shape)
         
         result_data = [x - y for x, y in zip(t1_broadcast.data, t2_broadcast.data)]
-        return Tensor(result_data, broadcast_shape, self.dtype)
+        return NdArray(result_data, broadcast_shape, self.dtype)
     
-    def mul(self, other: Union['Tensor', float, int]) -> 'Tensor':
+    def mul(self, other: Union['NdArray', float, int]) -> 'NdArray':
         """逐元素乘法。"""
         if isinstance(other, (int, float)):
             result_data = [x * other for x in self.data]
-            return Tensor(result_data, self.shape, self.dtype)
+            return NdArray(result_data, self.shape, self.dtype)
         
-        if not isinstance(other, Tensor):
+        if not isinstance(other, NdArray):
             raise TypeError(f"Unsupported type for mul: {type(other)}")
         
         if self.shape == other.shape:
             result_data = [x * y for x, y in zip(self.data, other.data)]
-            return Tensor(result_data, self.shape, self.dtype)
+            return NdArray(result_data, self.shape, self.dtype)
         
         broadcast_shape = self.shape.broadcast_with(other.shape)
         t1_broadcast = self._broadcast_to(broadcast_shape)
         t2_broadcast = other._broadcast_to(broadcast_shape)
         
         result_data = [x * y for x, y in zip(t1_broadcast.data, t2_broadcast.data)]
-        return Tensor(result_data, broadcast_shape, self.dtype)
+        return NdArray(result_data, broadcast_shape, self.dtype)
     
-    def div(self, other: Union['Tensor', float, int]) -> 'Tensor':
+    def div(self, other: Union['NdArray', float, int]) -> 'NdArray':
         """逐元素除法。"""
         if isinstance(other, (int, float)):
             if other == 0:
                 raise ValueError("Division by zero")
             result_data = [x / other for x in self.data]
-            return Tensor(result_data, self.shape, self.dtype)
+            return NdArray(result_data, self.shape, self.dtype)
         
-        if not isinstance(other, Tensor):
+        if not isinstance(other, NdArray):
             raise TypeError(f"Unsupported type for div: {type(other)}")
         
         if self.shape == other.shape:
@@ -288,7 +288,7 @@ class Tensor:
                 if y == 0:
                     raise ValueError("Division by zero")
                 result_data.append(x / y)
-            return Tensor(result_data, self.shape, self.dtype)
+            return NdArray(result_data, self.shape, self.dtype)
         
         broadcast_shape = self.shape.broadcast_with(other.shape)
         t1_broadcast = self._broadcast_to(broadcast_shape)
@@ -299,16 +299,16 @@ class Tensor:
             if y == 0:
                 raise ValueError("Division by zero")
             result_data.append(x / y)
-        return Tensor(result_data, broadcast_shape, self.dtype)
+        return NdArray(result_data, broadcast_shape, self.dtype)
     
-    def neg(self) -> 'Tensor':
+    def neg(self) -> 'NdArray':
         """取负。"""
         result_data = [-x for x in self.data]
-        return Tensor(result_data, self.shape, self.dtype)
+        return NdArray(result_data, self.shape, self.dtype)
     
     # ==================== 矩阵运算 ====================
     
-    def matmul(self, other: 'Tensor') -> 'Tensor':
+    def matmul(self, other: 'NdArray') -> 'NdArray':
         """矩阵乘法。
         
         Args:
@@ -339,11 +339,11 @@ class Tensor:
                         sum_val += self.data[i * k1 + k] * other.data[k * n + j]
                     result_data[i * n + j] = sum_val
             
-            return Tensor(result_data, Shape((m, n)), self.dtype)
+            return NdArray(result_data, Shape((m, n)), self.dtype)
         
         raise NotImplementedError("Only 2D matmul is currently supported")
     
-    def transpose(self, axes: Tuple[int, ...] = None) -> 'Tensor':
+    def transpose(self, axes: Tuple[int, ...] = None) -> 'NdArray':
         """转置张量维度。
         
         Args:
@@ -361,7 +361,7 @@ class Tensor:
             for i in range(m):
                 for j in range(n):
                     result_data[j * m + i] = self.data[i * n + j]
-            return Tensor(result_data, new_shape, self.dtype)
+            return NdArray(result_data, new_shape, self.dtype)
         
         # 通用情况：使用索引映射
         result_data = [0.0] * self.shape.size
@@ -379,7 +379,7 @@ class Tensor:
             new_idx = new_shape.linear_index(new_indices)
             result_data[new_idx] = self.data[i]
         
-        return Tensor(result_data, new_shape, self.dtype)
+        return NdArray(result_data, new_shape, self.dtype)
     
     @staticmethod
     def _linear_to_indices(linear_idx: int, shape: Shape) -> Tuple[int, ...]:
@@ -391,7 +391,7 @@ class Tensor:
             linear_idx -= idx * stride
         return tuple(indices)
     
-    def reshape(self, new_shape: Union[Tuple[int, ...], List[int]]) -> 'Tensor':
+    def reshape(self, new_shape: Union[Tuple[int, ...], List[int]]) -> 'NdArray':
         """将张量重塑为新维度。
         
         Args:
@@ -404,11 +404,11 @@ class Tensor:
             new_shape = tuple(new_shape)
         
         reshaped_shape = self.shape.reshape(new_shape)
-        return Tensor(self.data.copy(), reshaped_shape, self.dtype)
+        return NdArray(self.data.copy(), reshaped_shape, self.dtype)
     
     # ==================== 归约运算 ====================
     
-    def sum(self, axis: int = None, keepdims: bool = False) -> 'Tensor':
+    def sum(self, axis: int = None, keepdims: bool = False) -> 'NdArray':
         """求和张量元素。
         
         Args:
@@ -425,13 +425,13 @@ class Tensor:
                 new_shape = Shape((1,) * self.shape.ndim)
             else:
                 new_shape = Shape((1,))
-            return Tensor([result], new_shape, self.dtype)
+            return NdArray([result], new_shape, self.dtype)
         
         # 沿特定轴求和
         if axis < 0:
             axis = self.shape.ndim + axis
         if axis < 0 or axis >= self.shape.ndim:
-            raise ValueError(f"axis {axis} out of range for {self.shape.ndim}D tensor")
+            raise ValueError(f"axis {axis} out of range for {self.shape.ndim}D ndarr")
         
         # 计算新形状
         new_dims = list(self.shape.dims)
@@ -458,9 +458,9 @@ class Tensor:
             new_idx = new_shape.linear_index(tuple(new_indices))
             result_data[new_idx] += self.data[i]
         
-        return Tensor(result_data, new_shape, self.dtype)
+        return NdArray(result_data, new_shape, self.dtype)
     
-    def mean(self, axis: int = None, keepdims: bool = False) -> 'Tensor':
+    def mean(self, axis: int = None, keepdims: bool = False) -> 'NdArray':
         """求张量元素的平均值。"""
         sum_tensor = self.sum(axis, keepdims)
         if axis is None:
@@ -469,9 +469,9 @@ class Tensor:
             count = self.shape.dims[axis if axis >= 0 else self.shape.ndim + axis]
         
         result_data = [x / count for x in sum_tensor.data]
-        return Tensor(result_data, sum_tensor.shape, self.dtype)
+        return NdArray(result_data, sum_tensor.shape, self.dtype)
     
-    def max(self, axis: int = None, keepdims: bool = False) -> 'Tensor':
+    def max(self, axis: int = None, keepdims: bool = False) -> 'NdArray':
         """求张量元素的最大值。
         
         Args:
@@ -487,12 +487,12 @@ class Tensor:
                 new_shape = Shape((1,) * self.shape.ndim)
             else:
                 new_shape = Shape((1,))
-            return Tensor([result], new_shape, self.dtype)
+            return NdArray([result], new_shape, self.dtype)
         
         if axis < 0:
             axis = self.shape.ndim + axis
         if axis < 0 or axis >= self.shape.ndim:
-            raise ValueError(f"axis {axis} out of range for {self.shape.ndim}D tensor")
+            raise ValueError(f"axis {axis} out of range for {self.shape.ndim}D ndarr")
         
         new_dims = list(self.shape.dims)
         if keepdims:
@@ -515,9 +515,9 @@ class Tensor:
             if self.data[i] > result_data[new_idx]:
                 result_data[new_idx] = self.data[i]
         
-        return Tensor(result_data, new_shape, self.dtype)
+        return NdArray(result_data, new_shape, self.dtype)
     
-    def min(self, axis: int = None, keepdims: bool = False) -> 'Tensor':
+    def min(self, axis: int = None, keepdims: bool = False) -> 'NdArray':
         """求张量元素的最小值。
         
         Args:
@@ -533,12 +533,12 @@ class Tensor:
                 new_shape = Shape((1,) * self.shape.ndim)
             else:
                 new_shape = Shape((1,))
-            return Tensor([result], new_shape, self.dtype)
+            return NdArray([result], new_shape, self.dtype)
         
         if axis < 0:
             axis = self.shape.ndim + axis
         if axis < 0 or axis >= self.shape.ndim:
-            raise ValueError(f"axis {axis} out of range for {self.shape.ndim}D tensor")
+            raise ValueError(f"axis {axis} out of range for {self.shape.ndim}D ndarr")
         
         new_dims = list(self.shape.dims)
         if keepdims:
@@ -561,58 +561,58 @@ class Tensor:
             if self.data[i] < result_data[new_idx]:
                 result_data[new_idx] = self.data[i]
         
-        return Tensor(result_data, new_shape, self.dtype)
+        return NdArray(result_data, new_shape, self.dtype)
     
     # ==================== 数学函数 ====================
     
-    def exp(self) -> 'Tensor':
+    def exp(self) -> 'NdArray':
         """逐元素指数运算。"""
         result_data = [math.exp(x) for x in self.data]
-        return Tensor(result_data, self.shape, self.dtype)
+        return NdArray(result_data, self.shape, self.dtype)
     
-    def log(self) -> 'Tensor':
+    def log(self) -> 'NdArray':
         """逐元素自然对数。"""
         result_data = []
         for x in self.data:
             if x <= 0:
                 raise ValueError("log requires positive values")
             result_data.append(math.log(x))
-        return Tensor(result_data, self.shape, self.dtype)
+        return NdArray(result_data, self.shape, self.dtype)
     
-    def sqrt(self) -> 'Tensor':
+    def sqrt(self) -> 'NdArray':
         """逐元素平方根。"""
         result_data = []
         for x in self.data:
             if x < 0:
                 raise ValueError("sqrt requires non-negative values")
             result_data.append(math.sqrt(x))
-        return Tensor(result_data, self.shape, self.dtype)
+        return NdArray(result_data, self.shape, self.dtype)
     
-    def pow(self, exponent: float) -> 'Tensor':
+    def pow(self, exponent: float) -> 'NdArray':
         """逐元素幂运算。"""
         result_data = [x ** exponent for x in self.data]
-        return Tensor(result_data, self.shape, self.dtype)
+        return NdArray(result_data, self.shape, self.dtype)
     
     # ==================== 激活函数 ====================
     
-    def relu(self) -> 'Tensor':
+    def relu(self) -> 'NdArray':
         """ReLU 激活函数。"""
         result_data = [max(0.0, x) for x in self.data]
-        return Tensor(result_data, self.shape, self.dtype)
+        return NdArray(result_data, self.shape, self.dtype)
     
-    def sigmoid(self) -> 'Tensor':
+    def sigmoid(self) -> 'NdArray':
         """Sigmoid 激活函数。"""
         result_data = [1.0 / (1.0 + math.exp(-x)) for x in self.data]
-        return Tensor(result_data, self.shape, self.dtype)
+        return NdArray(result_data, self.shape, self.dtype)
     
-    def tanh(self) -> 'Tensor':
+    def tanh(self) -> 'NdArray':
         """Tanh 激活函数。"""
         result_data = [math.tanh(x) for x in self.data]
-        return Tensor(result_data, self.shape, self.dtype)
+        return NdArray(result_data, self.shape, self.dtype)
     
     # ==================== 广播辅助方法 ====================
     
-    def _broadcast_to(self, target_shape: Shape) -> 'Tensor':
+    def _broadcast_to(self, target_shape: Shape) -> 'NdArray':
         """将当前张量广播到目标形状。
         
         Args:
@@ -622,7 +622,7 @@ class Tensor:
             广播后的张量
         """
         if self.shape == target_shape:
-            return Tensor(self.data.copy(), self.shape, self.dtype)
+            return NdArray(self.data.copy(), self.shape, self.dtype)
         
         # 在左侧填充维度
         ndim_diff = target_shape.ndim - self.shape.ndim
@@ -653,17 +653,17 @@ class Tensor:
             
             result_data[i] = self.data[src_linear_idx]
         
-        return Tensor(result_data, target_shape, self.dtype)
+        return NdArray(result_data, target_shape, self.dtype)
     
     # ==================== 工具方法 ====================
     
-    def copy(self) -> 'Tensor':
+    def copy(self) -> 'NdArray':
         """创建当前张量的深拷贝。"""
-        return Tensor(self.data.copy(), self.shape, self.dtype)
+        return NdArray(self.data.copy(), self.shape, self.dtype)
     
     def __repr__(self) -> str:
         """字符串表示。"""
-        return f"Tensor(shape={self.shape}, dtype={self.dtype}, data={self.data[:10]}...)" if len(self.data) > 10 else f"Tensor(shape={self.shape}, dtype={self.dtype}, data={self.data})"
+        return f"NdArray(shape={self.shape}, dtype={self.dtype}, data={self.data[:10]}...)" if len(self.data) > 10 else f"NdArray(shape={self.shape}, dtype={self.dtype}, data={self.data})"
     
     def __str__(self) -> str:
         """字符串表示。"""

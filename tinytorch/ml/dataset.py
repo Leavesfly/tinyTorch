@@ -7,7 +7,7 @@ Author: TinyAI Team
 
 import random
 from typing import List, Tuple, Optional
-from tinytorch.tensor.tensor import Tensor
+from tinytorch.ndarr.ndarray import NdArray
 from tinytorch.utils.data import Dataset
 
 
@@ -74,7 +74,7 @@ class DataSet(Dataset):
         """打乱数据顺序。"""
         random.shuffle(self._indices)
     
-    def get_batches(self) -> List[Tuple[Tensor, Tensor]]:
+    def get_batches(self) -> List[Tuple[NdArray, NdArray]]:
         """获取所有批次。
         
         Returns:
@@ -99,9 +99,9 @@ class DataSet(Dataset):
             batch_data = [self.data[idx] for idx in batch_indices]
             batch_labels = [self.labels[idx] for idx in batch_indices]
             
-            # 转换为 Tensor
-            batch_data_tensor = Tensor(batch_data)
-            batch_labels_tensor = Tensor(batch_labels)
+            # 转换为 NdArray
+            batch_data_tensor = NdArray(batch_data)
+            batch_labels_tensor = NdArray(batch_labels)
             
             batches.append((batch_data_tensor, batch_labels_tensor))
         
