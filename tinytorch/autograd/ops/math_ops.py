@@ -37,15 +37,20 @@ class Log(Function):
     Backward: dL/dx = dL/dy / x
     """
     
+    def __init__(self, epsilon: float = 1e-10):
+        super().__init__()
+        self.epsilon = epsilon
+    
     def forward(self, x: NdArray) -> NdArray:
         """Forward pass for log."""
         self.save_for_backward(x)
         return x.log()
     
     def backward(self, grad_output: NdArray) -> List[NdArray]:
-        """Backward pass for log."""
+        """Backward pass for log. Clamps x to avoid division by zero."""
         x, = self.get_saved_tensors()
-        return [grad_output.div(x)]
+        x_safe = x.add(self.epsilon)
+        return [grad_output.div(x_safe)]
 
 
 class Sqrt(Function):
@@ -55,6 +60,10 @@ class Sqrt(Function):
     Backward: dL/dx = dL/dy / (2 * sqrt(x)) = dL/dy / (2 * y)
     """
     
+    def __init__(self, epsilon: float = 1e-10):
+        super().__init__()
+        self.epsilon = epsilon
+    
     def forward(self, x: NdArray) -> NdArray:
         """Forward pass for sqrt."""
         y = x.sqrt()
@@ -62,9 +71,10 @@ class Sqrt(Function):
         return y
     
     def backward(self, grad_output: NdArray) -> List[NdArray]:
-        """Backward pass for sqrt."""
+        """Backward pass for sqrt. Clamps denominator to avoid division by zero at x=0."""
         y, = self.get_saved_tensors()
-        return [grad_output.div(y.mul(2.0))]
+        denom = y.mul(2.0).add(self.epsilon)
+        return [grad_output.div(denom)]
 
 
 class Pow(Function):
@@ -74,14 +84,16 @@ class Pow(Function):
     Backward: dL/dx = dL/dy * n * x^(n-1)
     """
     
-    def __init__(self, exponent: float):
+    def __init__(self, exponent: float, epsilon: float = 1e-10):
         """Initialize power function.
         
         Args:
             exponent: Power exponent
+            epsilon: Small value to avoid 0^(n-1) when n < 1
         """
         super().__init__()
         self.exponent = exponent
+        self.epsilon = epsilon
     
     def forward(self, x: NdArray) -> NdArray:
         """Forward pass for power."""
@@ -89,7 +101,9 @@ class Pow(Function):
         return x.pow(self.exponent)
     
     def backward(self, grad_output: NdArray) -> List[NdArray]:
-        """Backward pass for power."""
+        """Backward pass for power. Clamps x when exponent < 1 to avoid 0^(negative)."""
         x, = self.get_saved_tensors()
-        grad = grad_output.mul(x.pow(self.exponent - 1).mul(self.exponent))
+        exp_minus_1 = self.exponent - 1
+        x_safe = x.add(self.epsilon) if exp_minus_1 < 0 else x
+        grad = grad_output.mul(x_safe.pow(exp_minus_1).mul(self.exponent))
         return [grad]

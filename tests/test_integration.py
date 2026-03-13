@@ -11,6 +11,7 @@ from tinytorch.autograd import Tensor
 from tinytorch.nn import Module
 from tinytorch.nn.layers import Linear, ReLU
 from tinytorch.nn.parameter import Parameter
+from tinytorch.ml.model import Model
 from tinytorch.ml.losses import MSELoss
 from tinytorch.ml.optimizers import SGD
 
@@ -51,6 +52,7 @@ class TestEndToEnd:
         
         # 训练一步
         optimizer.zero_grad()
+        initial_params = [p.value.data.copy() for p in model.parameters()]
         
         # 前向传播
         y_pred = model(x_train)
@@ -58,8 +60,15 @@ class TestEndToEnd:
         # 计算损失
         loss = loss_fn(y_pred, y_train)
         
-        # 验证损失是标量
-        assert loss.value.shape.size >= 1
+        # 反向传播 + 参数更新
+        loss.backward()
+        optimizer.step()
+
+        # 验证损失是标量，且参数发生更新
+        assert loss.value.shape.size == 1
+        updated_params = [p.value.data for p in model.parameters()]
+        changed = any(initial_params[i] != updated_params[i] for i in range(len(initial_params)))
+        assert changed
         
     def test_multiple_training_steps(self):
         """测试多步训练。"""
@@ -81,6 +90,7 @@ class TestEndToEnd:
             y_pred = model(x_train)
             loss = loss_fn(y_pred, y_train)
             losses.append(loss.value.data[0])
+            loss.backward()
             optimizer.step()
         
         # 验证损失被记录
@@ -144,6 +154,29 @@ class TestModelSaving:
             for i in range(len(initial_params))
         )
         assert changed
+
+    def test_model_save_and_load_round_trip(self, tmp_path):
+        """测试 Model.save/load 可恢复模块参数。"""
+        module = SimpleModel(input_size=2, hidden_size=3, output_size=1)
+        module.fc1.weight.value = NdArray([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]])
+        module.fc1.bias.value = NdArray([0.1, 0.2, 0.3])
+        module.fc2.weight.value = NdArray([[0.4, 0.5, 0.6]])
+        module.fc2.bias.value = NdArray([0.7])
+
+        file_path = tmp_path / 'model.pkl'
+        model = Model('simple', module)
+        model.save(str(file_path))
+
+        loaded = Model.load(
+            str(file_path),
+            module=SimpleModel(input_size=2, hidden_size=3, output_size=1),
+        )
+
+        loaded_params = dict(loaded.named_parameters())
+        assert loaded_params['fc1.weight'].value.data == [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+        assert loaded_params['fc1.bias'].value.data == [0.1, 0.2, 0.3]
+        assert loaded_params['fc2.weight'].value.data == [0.4, 0.5, 0.6]
+        assert loaded_params['fc2.bias'].value.data == [0.7]
 
 
 class TestBatchProcessing:
@@ -234,15 +267,10 @@ class TestErrorHandling:
     def test_invalid_input_shape(self):
         """测试无效输入形状。"""
         model = SimpleModel(input_size=3, hidden_size=5, output_size=2)
-        
-        # 输入维度不匹配
-        try:
+        # 输入维度不匹配：Linear 期望 (batch, 3)，传入 (1, 2) 会导致 matmul 形状错误
+        with pytest.raises(ValueError):
             x = Tensor(NdArray([[1.0, 2.0]]))  # 只有2维，应该是3维
-            y = model(x)
-            # 如果没有抛出异常，至少应该产生某种错误
-        except Exception:
-            # 预期会有错误
-            pass
+            model(x)
             
     def test_empty_parameters(self):
         """测试空参数列表。"""

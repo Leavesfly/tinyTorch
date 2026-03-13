@@ -1,11 +1,11 @@
 """PyTorch 风格的数据工具。"""
 
 import math
-import random
 from typing import Iterable, Iterator, List, Mapping, Sequence, Tuple, Optional, Any
 
 from tinytorch.autograd.tensor import Tensor
 from tinytorch.ndarr.ndarray import NdArray
+from tinytorch.utils import random as tt_random
 
 
 class Dataset:
@@ -56,7 +56,7 @@ class RandomSampler(Sampler):
 
     def __iter__(self) -> Iterator[int]:
         indices = list(range(len(self.dataset)))
-        random.shuffle(indices)
+        tt_random.shuffle(indices)
         return iter(indices)
 
     def __len__(self) -> int:

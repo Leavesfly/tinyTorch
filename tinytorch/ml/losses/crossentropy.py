@@ -3,11 +3,10 @@
 Author: TinyAI Team
 """
 
-import math
 from tinytorch.ml.losses.loss import Loss
 from tinytorch.autograd import Tensor
-from tinytorch.ndarr import NdArray
-from tinytorch.ndarr.shape import Shape
+from tinytorch.autograd.ops.loss import CrossEntropy as CrossEntropyOp
+from tinytorch.autograd.ops.loss import BinaryCrossEntropy
 
 
 class CrossEntropyLoss(Loss):
@@ -55,52 +54,7 @@ class CrossEntropyLoss(Loss):
         Returns:
             交叉熵损失值
         """
-        # 获取形状信息
-        if len(input.value.shape.dims) == 2:
-            batch_size, num_classes = input.value.shape.dims
-        else:
-            raise ValueError(f"Expected 2D input, got shape {input.value.shape.dims}")
-        
-        # 计算每个样本的损失
-        losses = []
-        
-        for b in range(batch_size):
-            # 提取当前样本的 logits
-            logits = []
-            for c in range(num_classes):
-                idx = b * num_classes + c
-                logits.append(input.value.data[idx])
-            
-            # 计算 softmax
-            max_logit = max(logits)
-            exp_logits = [math.exp(x - max_logit) for x in logits]
-            sum_exp = sum(exp_logits)
-            softmax_probs = [x / sum_exp for x in exp_logits]
-            
-            # 获取目标类别
-            target_class = int(target.value.data[b])
-            
-            # 计算负对数似然
-            # 计算负对数似然：loss = -log(softmax_probs[target_class])
-            prob = softmax_probs[target_class]
-            if prob <= 0:
-                prob = 1e-10  # 防止 log(0)
-            
-            loss = -math.log(prob)
-            losses.append(loss)
-        
-        # 聚合损失
-        if self.reduction == 'mean':
-            total_loss = sum(losses) / len(losses)
-        elif self.reduction == 'sum':
-            total_loss = sum(losses)
-        else:  # 'none'
-            # 返回每个样本的损失
-            return Tensor(NdArray(losses, Shape((len(losses),)), 'float32'), requires_grad=True)
-        
-        # 返回标量损失
-        loss_tensor = NdArray([total_loss], Shape((1,)), 'float32')
-        return Tensor(loss_tensor, requires_grad=True)
+        return CrossEntropyOp(self.reduction)(input, target)
     
     def __repr__(self) -> str:
         """返回损失函数的字符串表示。"""
@@ -148,41 +102,7 @@ class BCELoss(Loss):
         Returns:
             BCE 损失值
         """
-        # 展平输入
-        input_data = input.value.data
-        target_data = target.value.data
-        
-        if len(input_data) != len(target_data):
-            raise ValueError(
-                f"input and target must have same number of elements, "
-                f"got {len(input_data)} and {len(target_data)}"
-            )
-        
-        # 计算损失
-        losses = []
-        epsilon = 1e-10  # 防止 log(0)
-        
-        for i in range(len(input_data)):
-            pred = input_data[i]
-            tgt = target_data[i]
-            
-            # 限制概率范围
-            pred = max(epsilon, min(1.0 - epsilon, pred))
-            
-            # 二元交叉熵：BCE = -[target * log(pred) + (1 - target) * log(1 - pred)]
-            loss = -(tgt * math.log(pred) + (1.0 - tgt) * math.log(1.0 - pred))
-            losses.append(loss)
-        
-        # 聚合损失
-        if self.reduction == 'mean':
-            total_loss = sum(losses) / len(losses)
-        elif self.reduction == 'sum':
-            total_loss = sum(losses)
-        else:  # 'none'
-            return Tensor(NdArray(losses, input.value.shape, 'float32'), requires_grad=True)
-        
-        loss_tensor = NdArray([total_loss], (1,), 'float32')
-        return Tensor(loss_tensor, requires_grad=True)
+        return BinaryCrossEntropy(self.reduction)(input, target)
     
     def __repr__(self) -> str:
         """返回损失函数的字符串表示。"""

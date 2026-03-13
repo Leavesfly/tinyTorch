@@ -60,6 +60,7 @@ class Parameter(Tensor):
             'name': self.name,
             'value': self.value.to_list() if hasattr(self.value, 'to_list') else self.value,
             'shape': self.value.shape.dims if hasattr(self.value, 'shape') else None,
+            'dtype': self.value.dtype if hasattr(self.value, 'dtype') else 'float32',
             'requires_grad': self.requires_grad
         }
     
@@ -73,6 +74,12 @@ class Parameter(Tensor):
         Returns:
             Parameter 实例
         """
-        value = NdArray(data['value'])
+        from tinytorch.ndarr.shape import Shape
+        shape_dims = data.get('shape')
+        shape = Shape(tuple(shape_dims)) if shape_dims is not None else None
+        value = NdArray(data['value'], shape, dtype=data.get('dtype', 'float32'))
         name = data.get('name')
-        return Parameter(value, name=name)
+        requires_grad = data.get('requires_grad', True)
+        p = Parameter(value, name=name)
+        p.requires_grad = requires_grad
+        return p

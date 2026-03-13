@@ -5,11 +5,11 @@ Author: TinyAI Team
 
 from tinytorch.nn.module import Module
 from tinytorch.nn.parameter import Parameter
+from tinytorch.autograd.ops.nn import EmbeddingLookup as _EmbeddingLookup
 from tinytorch.autograd.tensor import Tensor
 from tinytorch.ndarr.ndarray import NdArray
-from tinytorch.ndarr.shape import Shape
 from tinytorch.nn import init
-import random
+from tinytorch.utils import random as tt_random
 
 
 class LayerNorm(Module):
@@ -70,12 +70,31 @@ class LayerNorm(Module):
         Returns:
             归一化后的输出变量
         """
-        # 计算均值
-        mean = input.mean()
-        
-        # 计算方差: var = mean((x - mean)^2)
+        input_dims = input.value.shape.dims
+        if len(input_dims) < len(self.normalized_shape):
+            raise ValueError(
+                f"input dims {input_dims} must have at least "
+                f"{len(self.normalized_shape)} dims for normalized_shape={self.normalized_shape}"
+            )
+
+        if tuple(input_dims[-len(self.normalized_shape):]) != tuple(self.normalized_shape):
+            raise ValueError(
+                f"Expected trailing dims {self.normalized_shape}, "
+                f"got {input_dims[-len(self.normalized_shape):]}"
+            )
+
+        # 在最后若干维上做归一化
+        reduce_axes = list(range(len(input_dims) - len(self.normalized_shape), len(input_dims)))
+
+        mean = input
+        for axis in reduce_axes:
+            mean = mean.mean(axis=axis, keepdims=True)
+
+        # 方差: var = mean((x - mean)^2)，与 mean 使用相同归约轴
         diff = input - mean
-        variance = (diff * diff).mean()
+        variance = diff * diff
+        for axis in reduce_axes:
+            variance = variance.mean(axis=axis, keepdims=True)
         
         # 归一化: (x - mean) / sqrt(var + eps)
         std = (variance + Tensor(NdArray([self.eps]), requires_grad=False)).sqrt()
@@ -144,7 +163,7 @@ class Dropout(Module):
         # 生成 dropout mask
         mask_data = []
         for _ in range(len(input.value.data)):
-            if random.random() < self.p:
+            if tt_random.random() < self.p:
                 mask_data.append(0.0)
             else:
                 # 缩放以保持期望值不变
@@ -216,32 +235,12 @@ class Embedding(Module):
         Returns:
             嵌入向量，形状为 (*input.shape, embedding_dim)
         """
-        # 获取输入索引
-        input_shape = input.value.shape.dims
-        input_data = input.value.data
-        
-        # 计算输出形状
-        output_shape_tuple = input_shape + (self.embedding_dim,)
-        output_shape = Shape(output_shape_tuple)
-        output_size = 1
-        for dim in output_shape_tuple:
-            output_size *= dim
-        
-        # 执行查表操作
-        output_data = []
-        for idx_val in input_data:
-            idx = int(idx_val)
-            if not 0 <= idx < self.num_embeddings:
-                raise IndexError(f"Index {idx} out of range [0, {self.num_embeddings})")
-            
-            # 提取对应的嵌入向量
-            start = idx * self.embedding_dim
-            end = start + self.embedding_dim
-            output_data.extend(self.weight.value.data[start:end])
-        
-        output_tensor = NdArray(output_data, output_shape, 'float32')
-        return Tensor(output_tensor, requires_grad=input.requires_grad)
+        return _EmbeddingLookup(self.num_embeddings, self.embedding_dim, self.padding_idx)(
+            input, self.weight
+        )
     
     def __repr__(self) -> str:
         return (f"{self.__class__.__name__}(num_embeddings={self.num_embeddings}, "
                 f"embedding_dim={self.embedding_dim})")
+
+

@@ -8,6 +8,7 @@ Author: TinyAI Team
 import math
 from tinytorch.ndarr.ndarray import NdArray
 from tinytorch.nn.parameter import Parameter
+from tinytorch.utils import random as tt_random
 
 
 def calculate_gain(nonlinearity: str = 'linear') -> float:
@@ -45,10 +46,9 @@ def uniform(a: float, b: float, shape, dtype: str = 'float32') -> NdArray:
         初始化后的新张量
     """
     from tinytorch.ndarr.shape import Shape
-    import random
     if isinstance(shape, tuple):
         shape = Shape(shape)
-    data = [random.uniform(a, b) for _ in range(shape.size)]
+    data = [tt_random.uniform(a, b) for _ in range(shape.size)]
     return NdArray(data, shape, dtype)
 
 
@@ -63,9 +63,8 @@ def uniform_(tensor: NdArray, a: float = 0.0, b: float = 1.0) -> NdArray:
     Returns:
         初始化后的张量（同一个对象）
     """
-    import random
     size = tensor.shape.size
-    tensor.data = [random.uniform(a, b) for _ in range(size)]
+    tensor.data = [tt_random.uniform(a, b) for _ in range(size)]
     return tensor
 
 
@@ -80,9 +79,8 @@ def normal_(tensor: NdArray, mean: float = 0.0, std: float = 1.0) -> NdArray:
     Returns:
         初始化后的张量（同一个对象）
     """
-    import random
     size = tensor.shape.size
-    tensor.data = [random.gauss(mean, std) for _ in range(size)]
+    tensor.data = [tt_random.gauss(mean, std) for _ in range(size)]
     return tensor
 
 

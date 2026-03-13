@@ -87,13 +87,15 @@ class Model:
         """
         return self.module.named_parameters()
     
-    def train(self) -> None:
+    def train(self) -> 'Model':
         """设置为训练模式。"""
         self.module.train()
+        return self
     
-    def eval(self) -> None:
+    def eval(self) -> 'Model':
         """设置为评估模式。"""
         self.module.eval()
+        return self
     
     def zero_grad(self) -> None:
         """清除所有参数的梯度。"""
@@ -102,7 +104,7 @@ class Model:
     def save(self, file_path: str) -> None:
         """保存模型到文件。
         
-        使用 pickle 序列化整个模型（包括结构和参数）。
+        保存模型元数据和模块状态字典。
         
         Args:
             file_path: 保存路径
@@ -110,36 +112,38 @@ class Model:
         model_state = {
             'name': self.name,
             'model_info': self.model_info,
-            'module_state': self.module.to_dict()
+            'training': self.module.training,
+            'module_state_dict': self.module.state_dict(),
         }
         
         with open(file_path, 'wb') as f:
             pickle.dump(model_state, f)
     
     @staticmethod
-    def load(file_path: str) -> 'Model':
+    def load(file_path: str, module: Optional[Module] = None) -> 'Model':
         """从文件加载模型。
         
         Args:
             file_path: 模型文件路径
+            module: 已构建好的模型模块；如果提供，则会加载保存的状态
         
         Returns:
             Model 实例
         """
         with open(file_path, 'rb') as f:
             model_state = pickle.load(f)
-        
-        # 注意：这里简化处理，实际使用时需要先构建相同结构的模型，
-        # 然后加载参数。完整实现需要模型注册机制。
-        print(f"Warning: Model.load() is simplified. "
-              f"Please construct model manually and use load_parameters() instead.")
-        
-        # 返回一个占位模型
-        from tinytorch.nn import Sequential
-        dummy_module = Sequential()
-        model = Model(model_state['name'], dummy_module)
+
+        if module is None:
+            raise ValueError(
+                "Model.load() requires a pre-constructed module instance. "
+                "Build the model architecture first, then pass it via module=..."
+            )
+
+        module.load_state_dict(model_state['module_state_dict'])
+        module.train(model_state.get('training', True))
+
+        model = Model(model_state['name'], module)
         model.model_info = model_state['model_info']
-        
         return model
     
     def save_parameters(self, file_path: str) -> None:
@@ -148,13 +152,9 @@ class Model:
         Args:
             file_path: 保存路径
         """
-        params_dict = {}
-        for name, param in self.named_parameters():
-            params_dict[name] = param.to_dict()
-        
         params_state = {
             'name': self.name,
-            'parameters': params_dict
+            'parameters': self.module.state_dict()
         }
         
         with open(file_path, 'wb') as f:
@@ -168,15 +168,8 @@ class Model:
         """
         with open(file_path, 'rb') as f:
             params_state = pickle.load(f)
-        
-        # 加载参数到模型
-        saved_params = params_state['parameters']
-        for name, param in self.named_parameters():
-            if name in saved_params:
-                param_data = saved_params[name]
-                # 更新参数值
-                from tinytorch.ndarr.ndarray import NdArray
-                param.value = NdArray(param_data['value'])
+
+        self.module.load_state_dict(params_state['parameters'], strict=False)
     
     def __repr__(self) -> str:
         """返回模型的字符串表示。"""

@@ -3,10 +3,12 @@
 Author: TinyAI Team
 """
 
+import math
+
 import pytest
 from tinytorch.ndarr import NdArray
 from tinytorch.autograd import Tensor
-from tinytorch.ml.losses import MSELoss, CrossEntropyLoss
+from tinytorch.ml.losses import MSELoss, CrossEntropyLoss, BCELoss
 
 
 class TestMSELoss:
@@ -54,6 +56,66 @@ class TestCrossEntropyLoss:
         loss = loss_fn(logits, targets)
         assert loss.value.data[0] > 0
 
+    def test_cross_entropy_backward_populates_logits_grad(self):
+        """测试交叉熵损失会向 logits 回传正确梯度。"""
+        logits = Tensor(NdArray([[2.0, 1.0, 0.1]]))
+        targets = Tensor(NdArray([0.0]), requires_grad=False)
+
+        loss = CrossEntropyLoss()(logits, targets)
+        loss.backward()
+
+        exp_values = [math.exp(0.0), math.exp(-1.0), math.exp(-1.9)]
+        total = sum(exp_values)
+        expected = [
+            exp_values[0] / total - 1.0,
+            exp_values[1] / total,
+            exp_values[2] / total,
+        ]
+
+        assert logits.grad is not None
+        for actual, target in zip(logits.grad.data, expected):
+            assert abs(actual - target) < 1e-6
+
+    def test_cross_entropy_reduction_none_keeps_batch_shape(self):
+        """测试 reduction='none' 返回逐样本损失。"""
+        logits = Tensor(NdArray([[2.0, 1.0, 0.1], [0.5, 2.5, 0.3]]))
+        targets = Tensor(NdArray([0.0, 1.0]), requires_grad=False)
+
+        loss = CrossEntropyLoss(reduction='none')(logits, targets)
+
+        assert loss.value.shape.dims == (2,)
+
+
+class TestBCELoss:
+    """二元交叉熵损失的测试。"""
+
+    def test_bce_forward(self):
+        """测试 BCE 前向传播。"""
+        probs = Tensor(NdArray([0.8, 0.3, 0.9]))
+        targets = Tensor(NdArray([1.0, 0.0, 1.0]), requires_grad=False)
+
+        loss = BCELoss()(probs, targets)
+
+        assert loss.value.data[0] > 0
+
+    def test_bce_backward_populates_input_grad(self):
+        """测试 BCE 会向输入概率回传正确梯度。"""
+        probs = Tensor(NdArray([0.8, 0.3, 0.9]))
+        targets = Tensor(NdArray([1.0, 0.0, 1.0]), requires_grad=False)
+
+        loss = BCELoss()(probs, targets)
+        loss.backward()
+
+        expected = [
+            (0.8 - 1.0) / (0.8 * 0.2 * 3.0),
+            (0.3 - 0.0) / (0.3 * 0.7 * 3.0),
+            (0.9 - 1.0) / (0.9 * 0.1 * 3.0),
+        ]
+
+        assert probs.grad is not None
+        for actual, target in zip(probs.grad.data, expected):
+            assert abs(actual - target) < 1e-6
+
 
 class TestLossProperties:
     """损失函数属性的测试。"""
@@ -84,6 +146,15 @@ class TestLossProperties:
         loss = loss_fn(pred, target)
         # 应该返回标量
         assert loss.value.shape.size == 1
+
+    def test_bce_reduction_none_keeps_input_shape(self):
+        """测试 BCE 在 reduction='none' 时保留输入形状。"""
+        probs = Tensor(NdArray([[0.8], [0.3], [0.9]]))
+        targets = Tensor(NdArray([[1.0], [0.0], [1.0]]), requires_grad=False)
+
+        loss = BCELoss(reduction='none')(probs, targets)
+
+        assert loss.value.shape.dims == (3, 1)
 
 
 if __name__ == '__main__':

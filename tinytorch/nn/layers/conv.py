@@ -6,7 +6,8 @@ Author: TinyAI Team
 from tinytorch.nn.module import Module
 from tinytorch.nn.parameter import Parameter
 from tinytorch.autograd import Tensor
-from tinytorch.ndarr import NdArray, Shape
+from tinytorch.autograd.ops.conv import Conv2d as _Conv2dOp
+from tinytorch.ndarr import NdArray
 from tinytorch.nn import init
 
 
@@ -83,102 +84,15 @@ class Conv2d(Module):
                 f"Expected {self.in_channels} input channels, got {in_channels}"
             )
         
-        # 计算输出尺寸
-        out_height = (height + 2 * self.padding - self.kernel_size) // self.stride + 1
-        out_width = (width + 2 * self.padding - self.kernel_size) // self.stride + 1
-        
-        # 对输入进行填充
-        if self.padding > 0:
-            padded_input = self._pad_input(input.value, self.padding)
-        else:
-            padded_input = input.value
-        
-        # 执行卷积
-        output_data = []
-        
-        for b in range(batch_size):
-            for oc in range(self.out_channels):
-                for oh in range(out_height):
-                    for ow in range(out_width):
-                        # 计算感受野的起始位置
-                        h_start = oh * self.stride
-                        w_start = ow * self.stride
-                        
-                        # 卷积操作：对所有输入通道求和
-                        conv_sum = 0.0
-                        for ic in range(self.in_channels):
-                            for kh in range(self.kernel_size):
-                                for kw in range(self.kernel_size):
-                                    # 输入索引
-                                    h_idx = h_start + kh
-                                    w_idx = w_start + kw
-                                    
-                                    # 获取输入值
-                                    input_idx = (b * in_channels * padded_input.shape.dims[2] * padded_input.shape.dims[3] +
-                                                ic * padded_input.shape.dims[2] * padded_input.shape.dims[3] +
-                                                h_idx * padded_input.shape.dims[3] +
-                                                w_idx)
-                                    input_val = padded_input.data[input_idx]
-                                    
-                                    # 获取权重值
-                                    weight_idx = (oc * self.in_channels * self.kernel_size * self.kernel_size +
-                                                 ic * self.kernel_size * self.kernel_size +
-                                                 kh * self.kernel_size +
-                                                 kw)
-                                    weight_val = self.weight.value.data[weight_idx]
-                                    
-                                    conv_sum += input_val * weight_val
-                        
-                        # 加上偏置
-                        if self.use_bias:
-                            conv_sum += self.bias.value.data[oc]
-                        
-                        output_data.append(conv_sum)
-        
-        # 构造输出张量
-        output_shape = Shape((batch_size, self.out_channels, out_height, out_width))
-        output_tensor = NdArray(output_data, output_shape, 'float32')
-        
-        return Tensor(output_tensor, requires_grad=input.requires_grad)
-    
-    def _pad_input(self, input_tensor: NdArray, padding: int) -> NdArray:
-        """对输入进行零填充。
-        
-        Args:
-            input_tensor: 输入张量，形状 (batch_size, channels, height, width)
-            padding: 填充大小
-        
-        Returns:
-            填充后的张量
-        """
-        batch_size, channels, height, width = input_tensor.shape.dims
-        padded_height = height + 2 * padding
-        padded_width = width + 2 * padding
-        
-        # 创建填充后的张量（全零）
-        padded_data = [0.0] * (batch_size * channels * padded_height * padded_width)
-        
-        # 将原始数据复制到填充后的张量中
-        for b in range(batch_size):
-            for c in range(channels):
-                for h in range(height):
-                    for w in range(width):
-                        # 原始索引
-                        src_idx = (b * channels * height * width +
-                                  c * height * width +
-                                  h * width +
-                                  w)
-                        
-                        # 填充后的索引
-                        dst_idx = (b * channels * padded_height * padded_width +
-                                  c * padded_height * padded_width +
-                                  (h + padding) * padded_width +
-                                  (w + padding))
-                        
-                        padded_data[dst_idx] = input_tensor.data[src_idx]
-        
-        padded_shape = Shape((batch_size, channels, padded_height, padded_width))
-        return NdArray(padded_data, padded_shape, input_tensor.dtype)
+        op = _Conv2dOp(
+            stride=self.stride,
+            padding=self.padding,
+            kernel_size=self.kernel_size,
+            use_bias=self.use_bias,
+        )
+        if self.use_bias and self.bias is not None:
+            return op(input, self.weight, self.bias)
+        return op(input, self.weight)
     
     def __repr__(self) -> str:
         """返回层的字符串表示。"""

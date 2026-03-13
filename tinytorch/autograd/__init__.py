@@ -8,7 +8,7 @@ Classes:
     Function: Function base class for operations
 """
 
-from tinytorch.autograd.tensor import Tensor
+from tinytorch.autograd.tensor import Tensor, no_grad
 from tinytorch.autograd.function import Function
 
-__all__ = ['Tensor', 'Function']
+__all__ = ['Tensor', 'Function', 'no_grad']

@@ -32,10 +32,10 @@ from tinytorch import utils
 
 # 方便导入常用类
 from tinytorch.ndarr import NdArray, Shape
-from tinytorch.autograd import Tensor, Function
+from tinytorch.autograd import Tensor, Function, no_grad
 
 __all__ = [
-    'tensor',
+    'ndarr',
     'autograd',
     'nn',
     'ml',
@@ -46,4 +46,5 @@ __all__ = [
     'Shape',
     'Tensor',
     'Function',
+    'no_grad',
 ]

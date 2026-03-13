@@ -8,7 +8,6 @@ from tinytorch.nn.module import Module
 from tinytorch.nn.parameter import Parameter
 from tinytorch.autograd.tensor import Tensor
 from tinytorch.ndarr.ndarray import NdArray
-from tinytorch.ndarr.shape import Shape
 from tinytorch.nn import init
 
 
@@ -104,10 +103,8 @@ class Linear(Module):
                     f"Linear layer expects input with {self.in_features} features, "
                     f"got {in_features}"
                 )
-            # reshape 为 2D: (batch_size * seq_len, in_features)
-            flat_tensor = NdArray(input.value.data,
-                                  Shape((batch_size * seq_len, in_features)), 'float32')
-            flat_input = Tensor(flat_tensor, requires_grad=input.requires_grad)
+            # 使用 autograd reshape，保持计算图连接
+            flat_input = input.reshape((batch_size * seq_len, in_features))
             
             # 执行 2D 线性变换
             weight_transposed = self.weight.transpose()
@@ -115,10 +112,8 @@ class Linear(Module):
             if self.bias is not None:
                 output = output + self.bias
             
-            # reshape 回 3D: (batch_size, seq_len, out_features)
-            out_tensor = NdArray(output.value.data,
-                                 Shape((batch_size, seq_len, self.out_features)), 'float32')
-            return Tensor(out_tensor, requires_grad=output.requires_grad)
+            # 使用 autograd reshape，保持梯度可回传到输入和参数
+            return output.reshape((batch_size, seq_len, self.out_features))
         
         # 检查输入形状（2D）
         if ndim != 2:

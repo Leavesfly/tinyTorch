@@ -61,6 +61,12 @@ class TestNdArray:
         transposed = t.transpose()
         assert transposed.shape.dims == (2, 2)
 
+    def test_randn_with_seed_is_reproducible(self):
+        """测试 randn 在相同 seed 下可复现。"""
+        a = NdArray.randn((2, 3), seed=42)
+        b = NdArray.randn((2, 3), seed=42)
+        assert a.data == b.data
+
 
 class TestndarrOperations:
     """张量运算的测试。"""

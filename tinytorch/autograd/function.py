@@ -67,6 +67,7 @@ class Function:
         
         # 存储输入变量
         self.inputs = list(inputs)
+        requires_grad = Tensor._grad_enabled and any(inp.requires_grad for inp in inputs)
         
         # 提取张量值
         input_tensors = [var.value for var in inputs]
@@ -79,15 +80,17 @@ class Function:
             # 多输出
             output_vars = []
             for tensor in output_tensors:
-                var = Tensor(tensor)
-                var.creator = self
+                var = Tensor(tensor, requires_grad=requires_grad)
+                if requires_grad:
+                    var.creator = self
                 output_vars.append(var)
             self.outputs = output_vars
             return tuple(output_vars)
         else:
             # 单输出
-            output_var = Tensor(output_tensors)
-            output_var.creator = self
+            output_var = Tensor(output_tensors, requires_grad=requires_grad)
+            if requires_grad:
+                output_var.creator = self
             self.outputs = [output_var]
             return output_var
     

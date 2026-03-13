@@ -16,6 +16,7 @@ from tinytorch.nn import layers
 # 导入常用层
 from tinytorch.nn.layers import Linear, ReLU, Sigmoid, Tanh, LeakyReLU
 from tinytorch.nn.layers import LayerNorm, Dropout, Embedding
+from tinytorch.nn.layers import Conv2d, RNN, LSTM, GRU, MultiHeadAttention
 
 __all__ = [
     'Module',
@@ -30,6 +31,11 @@ __all__ = [
     'LayerNorm',
     'Dropout',
     'Embedding',
+    'Conv2d',
+    'RNN',
+    'LSTM',
+    'GRU',
+    'MultiHeadAttention',
     'init',
     'layers',
 ]

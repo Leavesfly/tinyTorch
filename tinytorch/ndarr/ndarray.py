@@ -7,9 +7,9 @@ Version: 0.1.0
 """
 
 import math
-import random
 from typing import Union, List, Tuple, Any
 from tinytorch.ndarr.shape import Shape
+from tinytorch.utils import random as tt_random
 
 
 class NdArray:
@@ -85,12 +85,26 @@ class NdArray:
             (Shape, 扁平列表) 元组
         """
         def get_shape(lst):
-            """递归获取嵌套列表的形状。"""
+            """递归获取嵌套列表的形状，并校验各分支维度一致。"""
             if not isinstance(lst, list):
                 return ()
             if not lst:
                 return (0,)
-            return (len(lst),) + get_shape(lst[0])
+
+            first = lst[0]
+            if isinstance(first, list):
+                child_shape = get_shape(first)
+                for item in lst[1:]:
+                    if not isinstance(item, list):
+                        raise ValueError("Inconsistent nested list: mixed list/scalar elements")
+                    if get_shape(item) != child_shape:
+                        raise ValueError("Inconsistent nested list: ragged dimensions are not allowed")
+                return (len(lst),) + child_shape
+
+            for item in lst[1:]:
+                if isinstance(item, list):
+                    raise ValueError("Inconsistent nested list: mixed list/scalar elements")
+            return (len(lst),)
         
         def flatten(lst):
             """递归展平嵌套列表。"""
@@ -160,14 +174,13 @@ class NdArray:
         if isinstance(shape, tuple):
             shape = Shape(shape)
         
-        if seed is not None:
-            random.seed(seed)
+        rng = tt_random.generator(seed) if seed is not None else tt_random
         
         # Box-Muller 变换生成正态分布
         data = []
         for _ in range(shape.size):
-            u1 = random.random()
-            u2 = random.random()
+            u1 = rng.random()
+            u2 = rng.random()
             z0 = math.sqrt(-2.0 * math.log(u1)) * math.cos(2.0 * math.pi * u2)
             data.append(float(z0) if dtype == 'float32' else int(z0))
         
@@ -191,10 +204,9 @@ class NdArray:
         if isinstance(shape, tuple):
             shape = Shape(shape)
         
-        if seed is not None:
-            random.seed(seed)
-        
-        data = [random.uniform(low, high) for _ in range(shape.size)]
+        rng = tt_random.generator(seed) if seed is not None else tt_random
+
+        data = [rng.uniform(low, high) for _ in range(shape.size)]
         if dtype == 'int32':
             data = [int(x) for x in data]
         
@@ -567,7 +579,15 @@ class NdArray:
     
     def exp(self) -> 'NdArray':
         """逐元素指数运算。"""
-        result_data = [math.exp(x) for x in self.data]
+        result_data = []
+        for x in self.data:
+            # 避免 math.exp 在极值上直接抛出 OverflowError。
+            if x > 709.0:
+                result_data.append(float('inf'))
+            elif x < -745.0:
+                result_data.append(0.0)
+            else:
+                result_data.append(math.exp(x))
         return NdArray(result_data, self.shape, self.dtype)
     
     def log(self) -> 'NdArray':
@@ -602,7 +622,15 @@ class NdArray:
     
     def sigmoid(self) -> 'NdArray':
         """Sigmoid 激活函数。"""
-        result_data = [1.0 / (1.0 + math.exp(-x)) for x in self.data]
+        # 使用分段形式提升数值稳定性，避免 exp(-x) / exp(x) 溢出。
+        result_data = []
+        for x in self.data:
+            if x >= 0:
+                z = math.exp(-x)
+                result_data.append(1.0 / (1.0 + z))
+            else:
+                z = math.exp(x)
+                result_data.append(z / (1.0 + z))
         return NdArray(result_data, self.shape, self.dtype)
     
     def tanh(self) -> 'NdArray':
@@ -656,6 +684,27 @@ class NdArray:
         return NdArray(result_data, target_shape, self.dtype)
     
     # ==================== 工具方法 ====================
+
+    def to_list(self) -> List:
+        """将张量转换为嵌套列表。"""
+        if not self.shape.dims:
+            return self.data[0]
+
+        def build(offset: int, dims: Tuple[int, ...]):
+            if len(dims) == 1:
+                end = offset + dims[0]
+                return self.data[offset:end]
+
+            step = 1
+            for dim in dims[1:]:
+                step *= dim
+
+            return [
+                build(offset + i * step, dims[1:])
+                for i in range(dims[0])
+            ]
+
+        return build(0, self.shape.dims)
     
     def copy(self) -> 'NdArray':
         """创建当前张量的深拷贝。"""

@@ -5,10 +5,10 @@
 Author: TinyAI Team
 """
 
-import random
 from typing import List, Tuple, Optional
 from tinytorch.ndarr.ndarray import NdArray
 from tinytorch.utils.data import Dataset
+from tinytorch.utils import random as tt_random
 
 
 class DataSet(Dataset):
@@ -72,7 +72,7 @@ class DataSet(Dataset):
     
     def shuffle_data(self) -> None:
         """打乱数据顺序。"""
-        random.shuffle(self._indices)
+        tt_random.shuffle(self._indices)
     
     def get_batches(self) -> List[Tuple[NdArray, NdArray]]:
         """获取所有批次。
@@ -124,7 +124,7 @@ class DataSet(Dataset):
         
         # 先打乱数据
         indices = list(range(num_samples))
-        random.shuffle(indices)
+        tt_random.shuffle(indices)
         
         # 分割索引
         train_indices = indices[:split_idx]

@@ -58,16 +58,17 @@ class Module:
         """
         raise NotImplementedError(f"{self.__class__.__name__} must implement forward method")
     
-    def __call__(self, *inputs) -> Tensor:
+    def __call__(self, *inputs, **kwargs) -> Tensor:
         """调用模块，执行前向传播。
         
         Args:
             *inputs: 输入变量
+            **kwargs: 关键字输入参数
             
         Returns:
             前向传播的输出
         """
-        return self.forward(*inputs)
+        return self.forward(*inputs, **kwargs)
     
     def register_module(self, name: str, module: Optional['Module']) -> None:
         """注册子模块。
@@ -111,10 +112,13 @@ class Module:
         if tensor is None:
             if name in self._buffers:
                 del self._buffers[name]
+            if name in self.__dict__:
+                object.__delattr__(self, name)
         else:
             if not isinstance(tensor, Tensor):
                 raise TypeError(f"ndarr must be an instance of Tensor, got {type(tensor)}")
             self._buffers[name] = tensor
+            object.__setattr__(self, name, tensor)
     
     def parameters(self, recursive: bool = True) -> List['Parameter']:
         """获取所有参数列表。
@@ -156,6 +160,17 @@ class Module:
             for module_name, module in self._modules.items():
                 module_prefix = f"{prefix}.{module_name}" if prefix else module_name
                 yield from module.named_parameters(prefix=module_prefix, recursive=True)
+
+    def named_buffers(self, prefix: str = '', recursive: bool = True) -> Iterator[Tuple[str, Tensor]]:
+        """获取所有缓冲区的名称和值。"""
+        for name, buffer in self._buffers.items():
+            full_name = f"{prefix}.{name}" if prefix else name
+            yield (full_name, buffer)
+
+        if recursive:
+            for module_name, module in self._modules.items():
+                module_prefix = f"{prefix}.{module_name}" if prefix else module_name
+                yield from module.named_buffers(prefix=module_prefix, recursive=True)
     
     def modules(self) -> Iterator['Module']:
         """递归获取所有模块（包括自身）。
@@ -222,24 +237,54 @@ class Module:
         """
         # 延迟导入避免循环依赖
         from tinytorch.nn.parameter import Parameter
+
+        modules = self.__dict__.get('_modules')
+        parameters = self.__dict__.get('_parameters')
+        buffers = self.__dict__.get('_buffers')
         
         # 如果是特殊属性（以下划线开头），直接设置
         if name.startswith('_'):
             object.__setattr__(self, name, value)
         # 如果是 Module 实例，注册为子模块
         elif isinstance(value, Module):
+            if parameters is not None and name in parameters:
+                self.register_parameter(name, None)
+            if buffers is not None and name in buffers:
+                self.register_buffer(name, None)
             self.register_module(name, value)
             object.__setattr__(self, name, value)
         # 如果是 Parameter 实例，注册为参数
         elif isinstance(value, Parameter):
+            if modules is not None and name in modules:
+                self.register_module(name, None)
+            if buffers is not None and name in buffers:
+                self.register_buffer(name, None)
             self.register_parameter(name, value)
             object.__setattr__(self, name, value)
-        # 如果是 Tensor 实例，可能是缓冲区
-        elif isinstance(value, Tensor) and hasattr(self, '_buffers'):
-            self.register_buffer(name, value)
-            object.__setattr__(self, name, value)
         else:
+            # 覆盖已有参数/模块/缓冲区时，保持注册表与属性一致。
+            if modules is not None and name in modules:
+                self.register_module(name, None)
+            if parameters is not None and name in parameters:
+                self.register_parameter(name, None)
+            if buffers is not None and name in buffers:
+                self.register_buffer(name, None)
             object.__setattr__(self, name, value)
+
+    def __delattr__(self, name: str) -> None:
+        """删除属性并同步清理注册表。"""
+        modules = self.__dict__.get('_modules')
+        parameters = self.__dict__.get('_parameters')
+        buffers = self.__dict__.get('_buffers')
+
+        if modules is not None and name in modules:
+            self.register_module(name, None)
+        if parameters is not None and name in parameters:
+            self.register_parameter(name, None)
+        if buffers is not None and name in buffers:
+            self.register_buffer(name, None)
+
+        object.__delattr__(self, name)
     
     def __repr__(self) -> str:
         """返回模块的字符串表示。"""
@@ -258,6 +303,72 @@ class Module:
         main_str += ')'
         
         return main_str
+
+    @staticmethod
+    def _tensor_state(tensor: Tensor, kind: str) -> Dict[str, Any]:
+        """将 Tensor 序列化为统一的状态字典。"""
+        return {
+            'kind': kind,
+            'value': tensor.value.to_list(),
+            'shape': tensor.value.shape.dims,
+            'dtype': tensor.value.dtype,
+            'requires_grad': tensor.requires_grad,
+        }
+
+    def state_dict(self) -> Dict[str, Dict[str, Any]]:
+        """返回扁平化的参数/缓冲区状态。"""
+        state = {}
+        for name, param in self.named_parameters():
+            state[name] = self._tensor_state(param, kind='parameter')
+        for name, buffer in self.named_buffers():
+            state[name] = self._tensor_state(buffer, kind='buffer')
+        return state
+
+    def load_state_dict(self, state_dict: Dict[str, Dict[str, Any]], strict: bool = True) -> Dict[str, List[str]]:
+        """从扁平化状态字典加载参数和缓冲区。"""
+        from tinytorch.ndarr.ndarray import NdArray
+        from tinytorch.ndarr.shape import Shape
+
+        missing_keys = []
+        unexpected_keys = []
+
+        expected_parameters = dict(self.named_parameters())
+        expected_buffers = dict(self.named_buffers())
+        expected_keys = set(expected_parameters) | set(expected_buffers)
+
+        def _load_tensor(entry: Dict[str, Any], existing_value) -> NdArray:
+            shape_dims = entry.get('shape')
+            shape = Shape(tuple(shape_dims)) if shape_dims is not None else existing_value.shape
+            return NdArray(entry['value'], shape, dtype=entry.get('dtype', existing_value.dtype))
+
+        for name, param in expected_parameters.items():
+            if name not in state_dict:
+                missing_keys.append(name)
+                continue
+            entry = state_dict[name]
+            param.value = _load_tensor(entry, param.value)
+
+        for name, buffer in expected_buffers.items():
+            if name not in state_dict:
+                missing_keys.append(name)
+                continue
+            entry = state_dict[name]
+            buffer.value = _load_tensor(entry, buffer.value)
+
+        for key in state_dict:
+            if key not in expected_keys:
+                unexpected_keys.append(key)
+
+        if strict and (missing_keys or unexpected_keys):
+            raise KeyError(
+                f"Error(s) in loading state_dict: missing_keys={missing_keys}, "
+                f"unexpected_keys={unexpected_keys}"
+            )
+
+        return {
+            'missing_keys': missing_keys,
+            'unexpected_keys': unexpected_keys,
+        }
     
     def to_dict(self) -> Dict[str, Any]:
         """将模块转换为字典（用于序列化）。
@@ -269,24 +380,7 @@ class Module:
             'class': self.__class__.__name__,
             'name': self.name,
             'training': self.training,
-            'parameters': {},
-            'buffers': {},
-            'modules': {}
+            'state_dict': self.state_dict(),
         }
-        
-        # 保存参数
-        for name, param in self._parameters.items():
-            state['parameters'][name] = param.to_dict()
-        
-        # 保存缓冲区
-        for name, buffer in self._buffers.items():
-            state['buffers'][name] = {
-                'value': buffer.value.to_list() if hasattr(buffer.value, 'to_list') else buffer.value,
-                'shape': buffer.value.shape.dims if hasattr(buffer.value, 'shape') else None
-            }
-        
-        # 保存子模块
-        for name, module in self._modules.items():
-            state['modules'][name] = module.to_dict()
         
         return state

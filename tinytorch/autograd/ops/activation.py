@@ -6,7 +6,6 @@
 版本：0.1.0
 """
 
-import math
 from typing import List
 from tinytorch.ndarr import NdArray
 from tinytorch.autograd.function import Function
@@ -80,3 +79,24 @@ class Tanh(Function):
         one = NdArray.ones(y.shape, y.dtype)
         grad_x = grad_output.mul(one.sub(y.pow(2)))
         return [grad_x]
+
+
+class LeakyReLU(Function):
+    """LeakyReLU 激活函数：y = x (x>0) else negative_slope * x"""
+
+    def __init__(self, negative_slope: float = 0.01):
+        super().__init__()
+        self.negative_slope = negative_slope
+
+    def forward(self, x: NdArray) -> NdArray:
+        """LeakyReLU 的前向传播。"""
+        self.save_for_backward(x)
+        data = [v if v > 0 else self.negative_slope * v for v in x.data]
+        return NdArray(data, x.shape, x.dtype)
+
+    def backward(self, grad_output: NdArray) -> List[NdArray]:
+        """LeakyReLU 的反向传播。"""
+        x, = self.get_saved_tensors()
+        grad_scale = [1.0 if v > 0 else self.negative_slope for v in x.data]
+        grad_mask = NdArray(grad_scale, x.shape, x.dtype)
+        return [grad_output.mul(grad_mask)]

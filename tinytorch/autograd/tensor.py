@@ -6,11 +6,13 @@ Author: TinyAI Team
 Version: 0.1.0
 """
 
-from typing import Optional
+from typing import Optional, Union
 from tinytorch.ndarr import NdArray, Shape
 
 
 class Tensor:
+    _grad_enabled = True
+
     """自动微分变量。
     
     Variable 包装了一个 Tensor，并为自动微分维护梯度信息和计算图连接。
@@ -46,33 +48,64 @@ class Tensor:
         self.requires_grad = requires_grad
         self.name = name if name else f"var_{id(self)}"
     
-    def backward(self, retain_graph: bool = False):
+    def backward(self, grad_output: Optional[Union['Tensor', NdArray]] = None, retain_graph: bool = False):
         """通过反向传播计算梯度。
         
         这采用拓扑排序对计算图实现反向模式自动微分。
         
         参数:
+            grad_output: 输出梯度。标量输出可省略；非标量输出必须显式提供。
             retain_graph: 是否保留计算图
         """
         if not self.requires_grad:
             return
         
-        # 初始化梯度为 1（用于标量输出）
-        if self.grad is None:
-            self.grad = NdArray.ones(self.value.shape, self.value.dtype)
+        if grad_output is not None:
+            if isinstance(grad_output, Tensor):
+                grad_output = grad_output.value
+            if not isinstance(grad_output, NdArray):
+                raise TypeError(f"grad_output must be NdArray or Tensor, got {type(grad_output)}")
+            if grad_output.shape != self.value.shape:
+                raise ValueError(
+                    f"grad_output shape {grad_output.shape.dims} does not match output shape "
+                    f"{self.value.shape.dims}"
+                )
+            if self.grad is None:
+                self.grad = grad_output
+            else:
+                self.grad = self.grad.add(grad_output)
+        else:
+            # 仅标量输出可默认使用全 1 梯度
+            if self.value.shape.size != 1:
+                raise ValueError(
+                    "grad_output must be provided for non-scalar outputs "
+                    f"(got shape {self.value.shape.dims})"
+                )
+            if self.grad is None:
+                self.grad = NdArray.ones(self.value.shape, self.value.dtype)
         
-        # 拓扑排序获取执行顺序
+        # 迭代式拓扑排序，避免深图递归栈溢出
         topo_order = []
-        visited = set()
-        
-        def build_topo(var):
-            if var not in visited and var.creator is not None:
-                visited.add(var)
-                for input_var in var.creator.inputs:
-                    build_topo(input_var)
-                topo_order.append(var)
-        
-        build_topo(self)
+        visit_state = {}  # 0: 未访问, 1: 访问中, 2: 已完成
+        stack = [self]
+
+        while stack:
+            var = stack[-1]
+            state = visit_state.get(var, 0)
+
+            if state == 0:
+                visit_state[var] = 1
+                if var.creator is not None:
+                    for input_var in var.creator.inputs:
+                        if visit_state.get(input_var, 0) == 0:
+                            stack.append(input_var)
+            elif state == 1:
+                stack.pop()
+                visit_state[var] = 2
+                if var.creator is not None:
+                    topo_order.append(var)
+            else:
+                stack.pop()
         
         # 按逆拓扑顺序进行反向传播
         for var in reversed(topo_order):
@@ -100,13 +133,16 @@ class Tensor:
     
     def unchain_backward(self):
         """释放计算图以释放内存。"""
-        def clear_graph(var):
+        stack = [self]
+        visited = set()
+        while stack:
+            var = stack.pop()
+            if var in visited:
+                continue
+            visited.add(var)
             if var.creator is not None:
-                for input_var in var.creator.inputs:
-                    clear_graph(input_var)
+                stack.extend(var.creator.inputs)
                 var.creator = None
-        
-        clear_graph(self)
     
     def clear_grad(self):
         """清除梯度。"""
@@ -228,6 +264,11 @@ class Tensor:
         """Tanh 激活函数。"""
         from tinytorch.autograd.ops.activation import Tanh
         return Tanh()(self)
+
+    def leaky_relu(self, negative_slope: float = 0.01) -> 'Tensor':
+        """LeakyReLU 激活函数。"""
+        from tinytorch.autograd.ops.activation import LeakyReLU
+        return LeakyReLU(negative_slope=negative_slope)(self)
     
     # ==================== 属性 ====================
     
@@ -319,3 +360,20 @@ class Tensor:
     def __str__(self) -> str:
         """字符串表示。"""
         return self.__repr__()
+
+
+class _NoGrad:
+    """禁用自动梯度追踪的上下文管理器。"""
+
+    def __enter__(self):
+        self._previous = Tensor._grad_enabled
+        Tensor._grad_enabled = False
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        Tensor._grad_enabled = self._previous
+        return False
+
+
+def no_grad():
+    """返回禁用梯度追踪的上下文管理器。"""
+    return _NoGrad()

@@ -9,6 +9,7 @@
 from typing import List
 from tinytorch.ndarr import NdArray
 from tinytorch.autograd.function import Function
+from tinytorch.autograd.ops.utils import sum_to_shape
 
 
 class Add(Function):
@@ -36,27 +37,12 @@ class Add(Function):
         
         # 处理广播：对广播维度求和
         if grad_x.shape != x_shape:
-            grad_x = self._sum_to_shape(grad_x, x_shape)
+            grad_x = sum_to_shape(grad_x, x_shape)
         
         if grad_y.shape != y_shape:
-            grad_y = self._sum_to_shape(grad_y, y_shape)
+            grad_y = sum_to_shape(grad_y, y_shape)
         
         return [grad_x, grad_y]
-    
-    @staticmethod
-    def _sum_to_shape(tensor: NdArray, target_shape) -> NdArray:
-        """将 ndarr 求和到 target_shape（处理反向传播中的广播）。"""
-        # 对额外维度求和
-        ndim_diff = tensor.shape.ndim - target_shape.ndim
-        for _ in range(ndim_diff):
-            tensor = tensor.sum(axis=0, keepdims=False)
-        
-        # 对目标为 1 的维度求和
-        for i in range(target_shape.ndim):
-            if target_shape[i] == 1 and tensor.shape[i] > 1:
-                tensor = tensor.sum(axis=i, keepdims=True)
-        
-        return tensor
 
 
 class Sub(Function):
@@ -80,10 +66,10 @@ class Sub(Function):
         
         # 处理广播
         if grad_x.shape != x_shape:
-            grad_x = Add._sum_to_shape(grad_x, x_shape)
+            grad_x = sum_to_shape(grad_x, x_shape)
         
         if grad_y.shape != y_shape:
-            grad_y = Add._sum_to_shape(grad_y, y_shape)
+            grad_y = sum_to_shape(grad_y, y_shape)
         
         return [grad_x, grad_y]
 
@@ -111,10 +97,10 @@ class Mul(Function):
         
         # 处理广播
         if grad_x.shape != x_shape:
-            grad_x = Add._sum_to_shape(grad_x, x_shape)
+            grad_x = sum_to_shape(grad_x, x_shape)
         
         if grad_y.shape != y_shape:
-            grad_y = Add._sum_to_shape(grad_y, y_shape)
+            grad_y = sum_to_shape(grad_y, y_shape)
         
         return [grad_x, grad_y]
 
@@ -137,15 +123,18 @@ class Div(Function):
         x_shape = self.inputs[0].value.shape
         y_shape = self.inputs[1].value.shape
         
+        # 数值稳定性：避免 y^2 接近 0 时梯度爆炸
+        eps = 1e-10
+        y_safe = y.pow(2).add(eps)
         grad_x = grad_output.div(y)
-        grad_y = grad_output.neg().mul(x).div(y.pow(2))
+        grad_y = grad_output.neg().mul(x).div(y_safe)
         
         # 处理广播
         if grad_x.shape != x_shape:
-            grad_x = Add._sum_to_shape(grad_x, x_shape)
+            grad_x = sum_to_shape(grad_x, x_shape)
         
         if grad_y.shape != y_shape:
-            grad_y = Add._sum_to_shape(grad_y, y_shape)
+            grad_y = sum_to_shape(grad_y, y_shape)
         
         return [grad_x, grad_y]
 
