@@ -15,7 +15,7 @@ from tinytorch.utils import random as tt_random
 class NdArray:
     """多维数组类，支持各种运算操作。
     
-    Tensor 使用扁平列表存储数据（行优先布局），依赖 Shape 进行维度管理。
+    NdArray 使用扁平列表存储数据（行优先布局），依赖 Shape 进行维度管理。
     所有操作都会创建新的 Tensor 对象。
     
     Attributes:
@@ -29,7 +29,6 @@ class NdArray:
         (2, 2)
         >>> t2 = t.add(NdArray([[1, 1], [1, 1]]))
         >>> print(t2.data)
-        [2.0, 3.0, 4.0, 5.0]
     """
     
     def __init__(self, data: Union[List, float, int], shape: Shape = None, dtype: str = 'float32'):

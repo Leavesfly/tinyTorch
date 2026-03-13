@@ -1,9 +1,13 @@
-"""带自动微分的基本算术运算。
+"""基本算术运算 - 支持自动微分。
 
-该模块实现了基本算术运算：Add（加）、Sub（减）、Mul（乘）、Div（除）、Neg（负）。
+本模块实现以下基本算术运算:
+    - Add:  元素级加法 z = x + y
+    - Sub:  元素级减法 z = x - y
+    - Mul:  元素级乘法 z = x * y
+    - Div:  元素级除法 z = x / y
+    - Neg:  取负运算 y = -x
 
-作者：TinyAI Team
-版本：0.1.0
+所有运算均支持广播机制，反向传播时自动处理梯度归约。
 """
 
 from typing import List
@@ -13,143 +17,146 @@ from tinytorch.autograd.ops.utils import sum_to_shape
 
 
 class Add(Function):
-    """元素级加法：z = x + y
-    
-    前向传播：z = x + y
-    反向传播：dL/dx = dL/dz, dL/dy = dL/dz
+    """元素级加法运算。
+
+    数学表达式: z = x + y
+
+    前向传播:
+        z = x + y
+
+    反向传播:
+        ∂L/∂x = ∂L/∂z
+        ∂L/∂y = ∂L/∂z
+
+    注意: 支持广播机制，反向传播时自动归约梯度至输入形状。
     """
-    
+
     def forward(self, x: NdArray, y: NdArray) -> NdArray:
-        """加法的前向传播。"""
+        """前向传播: 计算元素级加法。"""
         return x.add(y)
-    
+
     def backward(self, grad_output: NdArray) -> List[NdArray]:
-        """加法的反向传播。
-        
-        梯度均等地流向两个输入。
-        处理广播：对广播维度求和。
+        """反向传播: 计算输入梯度。
+
+        梯度均等地流向两个输入，并处理广播维度的归约。
         """
-        x_shape = self.inputs[0].value.shape
-        y_shape = self.inputs[1].value.shape
-        
-        grad_x = grad_output
-        grad_y = grad_output
-        
-        # 处理广播：对广播维度求和
-        if grad_x.shape != x_shape:
-            grad_x = sum_to_shape(grad_x, x_shape)
-        
-        if grad_y.shape != y_shape:
-            grad_y = sum_to_shape(grad_y, y_shape)
-        
+        x_shape, y_shape = self.inputs[0].value.shape, self.inputs[1].value.shape
+        grad_x = sum_to_shape(grad_output, x_shape) if grad_output.shape != x_shape else grad_output
+        grad_y = sum_to_shape(grad_output, y_shape) if grad_output.shape != y_shape else grad_output
         return [grad_x, grad_y]
 
 
 class Sub(Function):
-    """元素级减法：z = x - y
-    
-    前向传播：z = x - y
-    反向传播：dL/dx = dL/dz, dL/dy = -dL/dz
+    """元素级减法运算。
+
+    数学表达式: z = x - y
+
+    前向传播:
+        z = x - y
+
+    反向传播:
+        ∂L/∂x = ∂L/∂z
+        ∂L/∂y = -∂L/∂z
+
+    注意: 支持广播机制，反向传播时自动归约梯度至输入形状。
     """
-    
+
     def forward(self, x: NdArray, y: NdArray) -> NdArray:
-        """减法的前向传播。"""
+        """前向传播: 计算元素级减法。"""
         return x.sub(y)
-    
+
     def backward(self, grad_output: NdArray) -> List[NdArray]:
-        """减法的反向传播。"""
-        x_shape = self.inputs[0].value.shape
-        y_shape = self.inputs[1].value.shape
-        
-        grad_x = grad_output
-        grad_y = grad_output.neg()
-        
-        # 处理广播
-        if grad_x.shape != x_shape:
-            grad_x = sum_to_shape(grad_x, x_shape)
-        
-        if grad_y.shape != y_shape:
-            grad_y = sum_to_shape(grad_y, y_shape)
-        
+        """反向传播: 计算输入梯度。"""
+        x_shape, y_shape = self.inputs[0].value.shape, self.inputs[1].value.shape
+        grad_x = sum_to_shape(grad_output, x_shape) if grad_output.shape != x_shape else grad_output
+        grad_y = sum_to_shape(grad_output.neg(), y_shape) if grad_output.shape != y_shape else grad_output.neg()
         return [grad_x, grad_y]
 
 
 class Mul(Function):
-    """元素级乘法：z = x * y
-    
-    前向传播：z = x * y
-    反向传播：dL/dx = dL/dz * y, dL/dy = dL/dz * x
+    """元素级乘法运算。
+
+    数学表达式: z = x * y
+
+    前向传播:
+        z = x * y
+
+    反向传播:
+        ∂L/∂x = ∂L/∂z * y
+        ∂L/∂y = ∂L/∂z * x
+
+    注意: 支持广播机制，反向传播时自动归约梯度至输入形状。
     """
-    
+
     def forward(self, x: NdArray, y: NdArray) -> NdArray:
-        """乘法的前向传播。"""
+        """前向传播: 计算元素级乘法。"""
         self.save_for_backward(x, y)
         return x.mul(y)
-    
+
     def backward(self, grad_output: NdArray) -> List[NdArray]:
-        """乘法的反向传播。"""
+        """反向传播: 计算输入梯度。"""
         x, y = self.get_saved_tensors()
-        x_shape = self.inputs[0].value.shape
-        y_shape = self.inputs[1].value.shape
-        
-        grad_x = grad_output.mul(y)
-        grad_y = grad_output.mul(x)
-        
-        # 处理广播
-        if grad_x.shape != x_shape:
-            grad_x = sum_to_shape(grad_x, x_shape)
-        
-        if grad_y.shape != y_shape:
-            grad_y = sum_to_shape(grad_y, y_shape)
-        
+        x_shape, y_shape = self.inputs[0].value.shape, self.inputs[1].value.shape
+        grad_x = sum_to_shape(grad_output.mul(y), x_shape) if grad_output.shape != x_shape else grad_output.mul(y)
+        grad_y = sum_to_shape(grad_output.mul(x), y_shape) if grad_output.shape != y_shape else grad_output.mul(x)
         return [grad_x, grad_y]
 
 
 class Div(Function):
-    """元素级除法：z = x / y
-    
-    前向传播：z = x / y
-    反向传播：dL/dx = dL/dz / y, dL/dy = -dL/dz * x / y^2
+    """元素级除法运算。
+
+    数学表达式: z = x / y
+
+    前向传播:
+        z = x / y
+
+    反向传播:
+        ∂L/∂x = ∂L/∂z / y
+        ∂L/∂y = -∂L/∂z * x / y²
+
+    注意:
+        - 支持广播机制，反向传播时自动归约梯度至输入形状
+        - 添加小常数 eps 保证数值稳定性，避免除零错误
     """
-    
+
     def forward(self, x: NdArray, y: NdArray) -> NdArray:
-        """除法的前向传播。"""
+        """前向传播: 计算元素级除法。"""
         self.save_for_backward(x, y)
         return x.div(y)
-    
+
     def backward(self, grad_output: NdArray) -> List[NdArray]:
-        """除法的反向传播。"""
+        """反向传播: 计算输入梯度。"""
         x, y = self.get_saved_tensors()
-        x_shape = self.inputs[0].value.shape
-        y_shape = self.inputs[1].value.shape
-        
-        # 数值稳定性：避免 y^2 接近 0 时梯度爆炸
+        x_shape, y_shape = self.inputs[0].value.shape, self.inputs[1].value.shape
+
+        # 数值稳定性: 避免 y² 接近 0 时梯度爆炸
         eps = 1e-10
-        y_safe = y.pow(2).add(eps)
+        y_sq_safe = y.pow(2).add(eps)
         grad_x = grad_output.div(y)
-        grad_y = grad_output.neg().mul(x).div(y_safe)
-        
+        grad_y = grad_output.neg().mul(x).div(y_sq_safe)
+
         # 处理广播
-        if grad_x.shape != x_shape:
-            grad_x = sum_to_shape(grad_x, x_shape)
-        
-        if grad_y.shape != y_shape:
-            grad_y = sum_to_shape(grad_y, y_shape)
-        
+        grad_x = sum_to_shape(grad_x, x_shape) if grad_x.shape != x_shape else grad_x
+        grad_y = sum_to_shape(grad_y, y_shape) if grad_y.shape != y_shape else grad_y
         return [grad_x, grad_y]
 
 
 class Neg(Function):
-    """取负运算：y = -x
-    
-    前向传播：y = -x
-    反向传播：dL/dx = -dL/dy
+    """取负运算。
+
+    数学表达式: y = -x
+
+    前向传播:
+        y = -x
+
+    反向传播:
+        ∂L/∂x = -∂L/∂y
     """
-    
+
     def forward(self, x: NdArray) -> NdArray:
-        """取负的前向传播。"""
+        """前向传播: 计算取负。"""
         return x.neg()
-    
+
     def backward(self, grad_output: NdArray) -> List[NdArray]:
-        """取负的逆向传播。"""
+        """反向传播: 计算输入梯度。"""
         return [grad_output.neg()]
