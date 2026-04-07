@@ -178,6 +178,8 @@ class Trainer:
         if self.val_dataset is None:
             raise ValueError("No validation dataset provided")
         
+        from tinytorch.autograd.tensor import no_grad
+        
         # 设置为评估模式
         self.model.eval()
         
@@ -186,20 +188,21 @@ class Trainer:
         total_loss = 0.0
         num_batches = len(batches)
         
-        for batch_data, batch_labels in batches:
-            # 转换为 Tensor
-            input_var = Tensor(batch_data, requires_grad=False)
-            target_var = Tensor(batch_labels, requires_grad=False)
-            
-            # 前向传播（不需要梯度）
-            output = self.model(input_var)
-            
-            # 计算损失
-            loss = self.loss_fn(output, target_var)
-            
-            # 累积损失
-            loss_value = loss.value.data[0]
-            total_loss += loss_value
+        with no_grad():
+            for batch_data, batch_labels in batches:
+                # 转换为 Tensor
+                input_var = Tensor(batch_data, requires_grad=False)
+                target_var = Tensor(batch_labels, requires_grad=False)
+                
+                # 前向传播（不需要梯度）
+                output = self.model(input_var)
+                
+                # 计算损失
+                loss = self.loss_fn(output, target_var)
+                
+                # 累积损失
+                loss_value = loss.value.data[0]
+                total_loss += loss_value
         
         # 返回平均损失
         avg_loss = total_loss / num_batches

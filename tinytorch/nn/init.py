@@ -31,7 +31,12 @@ def calculate_gain(nonlinearity: str = 'linear') -> float:
         'tanh': 5.0 / 3,
         'sigmoid': 1.0
     }
-    return gains.get(nonlinearity, 1.0)
+    if nonlinearity not in gains:
+        raise ValueError(
+            f"Unsupported nonlinearity '{nonlinearity}'. "
+            f"Supported: {list(gains.keys())}"
+        )
+    return gains[nonlinearity]
 
 
 def uniform(a: float, b: float, shape, dtype: str = 'float32') -> NdArray:
@@ -221,10 +226,14 @@ def _calculate_fan_in_and_fan_out(tensor: NdArray) -> 'Tuple[int, int]':
     """
     dimensions = len(tensor.shape.dims)
     
-    if dimensions < 2:
-        raise ValueError("Fan in and fan out can not be computed for ndarr with fewer than 2 dimensions")
+    if dimensions < 1:
+        raise ValueError("Fan in and fan out can not be computed for scalar tensors")
     
-    if dimensions == 2:  # 线性层权重 (out_features, in_features)
+    if dimensions == 1:
+        # 一维张量（如偏置项），fan_in = fan_out = size
+        fan_in = tensor.shape.dims[0]
+        fan_out = tensor.shape.dims[0]
+    elif dimensions == 2:  # 线性层权重 (out_features, in_features)
         fan_in = tensor.shape.dims[1]
         fan_out = tensor.shape.dims[0]
     else:  # 卷积层等 (out_channels, in_channels, kernel_h, kernel_w, ...)

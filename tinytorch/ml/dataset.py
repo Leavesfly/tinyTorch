@@ -79,12 +79,26 @@ class DataSet(Dataset):
         
         Returns:
             批次列表，每个批次是 (batch_data, batch_labels) 元组
+            
+        Note:
+            对于大数据集，建议使用 __iter__ 方法进行惰性迭代，
+            避免一次性将所有批次加载到内存中。
+        """
+        return list(self.iter_batches())
+    
+    def iter_batches(self) -> Iterator[Tuple[NdArray, NdArray]]:
+        """惰性迭代所有批次（生成器模式）。
+        
+        与 get_batches() 不同，此方法不会一次性创建所有批次，
+        而是按需生成，适合大数据集场景。
+        
+        Yields:
+            (batch_data, batch_labels) 元组
         """
         # 如果需要打乱，先打乱索引
         if self.shuffle:
             self.shuffle_data()
         
-        batches = []
         num_samples = len(self.data)
         num_batches = (num_samples + self.batch_size - 1) // self.batch_size
         
@@ -103,9 +117,7 @@ class DataSet(Dataset):
             batch_data_tensor = NdArray(batch_data)
             batch_labels_tensor = NdArray(batch_labels)
             
-            batches.append((batch_data_tensor, batch_labels_tensor))
-        
-        return batches
+            yield batch_data_tensor, batch_labels_tensor
     
     def split(self, ratio: float) -> Tuple['DataSet', 'DataSet']:
         """分割数据集。

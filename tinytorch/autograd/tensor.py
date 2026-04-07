@@ -145,6 +145,7 @@ class Tensor:
                 continue
             visited.add(var)
             if var.creator is not None:
+                var.creator.clear_saved_tensors()
                 stack.extend(var.creator.inputs)
                 var.creator = None
     

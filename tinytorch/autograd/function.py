@@ -155,3 +155,10 @@ class Function:
             保存的张量元组
         """
         return tuple(self.saved_tensors)
+    
+    def clear_saved_tensors(self):
+        """清空保存的张量以释放内存。
+        
+        在反向传播完成且不需要保留计算图时调用。
+        """
+        self.saved_tensors = []
