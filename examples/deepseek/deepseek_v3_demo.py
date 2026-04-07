@@ -20,14 +20,13 @@ Author: TinyAI Team
 """
 
 import math
-import random
 
-from tinytorch.ndarr import NdArray, Shape
 from tinytorch.autograd import Tensor
+from tinytorch.ndarr import NdArray, Shape
 from tinytorch.nn import Module
+from tinytorch.nn.container import ModuleList
 from tinytorch.nn.layers import Linear, Embedding
 from tinytorch.nn.parameter import Parameter
-from tinytorch.nn.container import ModuleList
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -94,7 +93,7 @@ class RotaryEmbedding:
         # θᵢ = 1 / base^(2i/dim)，频率从高到低
         inv_freq = [1.0 / (base ** (2 * i / self.dim)) for i in range(half)]
 
-        self.cos_cache = []   # (max_len, dim)
+        self.cos_cache = []  # (max_len, dim)
         self.sin_cache = []
         for pos in range(max_len):
             cos_row, sin_row = [], []
@@ -171,14 +170,14 @@ class DeepSeekExpert(Module):
     def __init__(self, hidden_size: int, intermediate_size: int):
         super().__init__()
         self.gate_proj = Linear(hidden_size, intermediate_size, use_bias=False)
-        self.up_proj   = Linear(hidden_size, intermediate_size, use_bias=False)
+        self.up_proj = Linear(hidden_size, intermediate_size, use_bias=False)
         self.down_proj = Linear(intermediate_size, hidden_size, use_bias=False)
 
     def forward(self, x: Tensor) -> Tensor:
-        gate = silu(self.gate_proj(x))   # SiLU 门控：(1, intermediate)
-        up   = self.up_proj(x)           # 信息分支：(1, intermediate)
-        h    = gate * up                 # SwiGLU：逐元素门控融合
-        return self.down_proj(h)         # 投影回 hidden：(1, hidden)
+        gate = silu(self.gate_proj(x))  # SiLU 门控：(1, intermediate)
+        up = self.up_proj(x)  # 信息分支：(1, intermediate)
+        h = gate * up  # SwiGLU：逐元素门控融合
+        return self.down_proj(h)  # 投影回 hidden：(1, hidden)
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -206,7 +205,7 @@ class DeepSeekMoEGate(Module):
 
     def forward(self, x: Tensor):
         """返回 (top_k_indices, top_k_weights, all_probs)。"""
-        logits = self.gate(x).value.data   # (1, num_routed_experts) → 列表
+        logits = self.gate(x).value.data  # (1, num_routed_experts) → 列表
 
         # Softmax（数值稳定版：减去最大值防溢出）
         max_l = max(logits)
@@ -300,7 +299,7 @@ class DeepSeekMoE(Module):
             # 门控权重乘以专家输出（通过 Tensor 运算保持梯度图）
             weight_var = Tensor(NdArray([weight], Shape((1,)), 'float32'),
                                 requires_grad=False)
-            weighted = expert_out * weight_var   # (1, hidden) * (1,) → 广播
+            weighted = expert_out * weight_var  # (1, hidden) * (1,) → 广播
             routed_out = weighted if routed_out is None else (routed_out + weighted)
 
         # ── 合并共享专家与路由专家输出 ──
@@ -380,9 +379,9 @@ class MultiHeadLatentAttention(Module):
                  kv_lora_rank: int, q_lora_rank: int, head_dim: int):
         super().__init__()
         self.hidden_size = hidden_size
-        self.num_heads   = num_heads
-        self.head_dim    = head_dim
-        self.attn_dim    = num_heads * head_dim   # 等效注意力维度
+        self.num_heads = num_heads
+        self.head_dim = head_dim
+        self.attn_dim = num_heads * head_dim  # 等效注意力维度
 
         # ── Q 低秩分解（两步投影）──
         # Step 1：hidden → q_lora_rank（压缩 Q）
@@ -413,23 +412,23 @@ class MultiHeadLatentAttention(Module):
             position: 当前 token 的绝对序列位置（用于 RoPE）
         """
         # ── Q 路径：低秩分解 + RMSNorm + RoPE ──
-        c_q = self.q_a_norm(self.q_a_proj(x))   # (1, q_lora_rank)
-        Q   = self.q_b_proj(c_q)                 # (1, attn_dim)
-        Q   = self.rope.apply(Q, position)        # 注入位置信息
+        c_q = self.q_a_norm(self.q_a_proj(x))  # (1, q_lora_rank)
+        Q = self.q_b_proj(c_q)  # (1, attn_dim)
+        Q = self.rope.apply(Q, position)  # 注入位置信息
 
         # ── KV 路径：联合低秩压缩 → 解压出 K、V ──
         # c_kv：推理时真正存入 KV 缓存的内容（kv_lora_rank 维）
         c_kv = self.kv_a_norm(self.kv_a_proj(x))  # (1, kv_lora_rank)
-        kv   = self.kv_b_proj(c_kv)               # (1, attn_dim×2)
+        kv = self.kv_b_proj(c_kv)  # (1, attn_dim×2)
 
         # 分割 K 和 V（前半 = K，后半 = V）
-        half   = self.attn_dim
+        half = self.attn_dim
         kv_dat = kv.value.data
         K = Tensor(NdArray(kv_dat[:half], Shape((1, half)), 'float32'),
                    requires_grad=x.requires_grad)
         V = Tensor(NdArray(kv_dat[half:], Shape((1, half)), 'float32'),
                    requires_grad=x.requires_grad)
-        K = self.rope.apply(K, position)           # K 也注入位置信息
+        K = self.rope.apply(K, position)  # K 也注入位置信息
 
         # ── Scaled Dot-Product Attention ──
         # score = Q @ K^T / sqrt(head_dim)，形状 (1,1)
@@ -447,7 +446,7 @@ class MultiHeadLatentAttention(Module):
         )
 
         # ── 输出投影 ──
-        return self.o_proj(output)                 # (1, hidden)
+        return self.o_proj(output)  # (1, hidden)
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -543,9 +542,9 @@ class DeepSeekV3Model(Module):
                  num_routed_experts: int = 8, num_shared_experts: int = 1,
                  top_k: int = 2):
         super().__init__()
-        self.vocab_size  = vocab_size
+        self.vocab_size = vocab_size
         self.hidden_size = hidden_size
-        self.num_layers  = num_layers
+        self.num_layers = num_layers
 
         # 词嵌入层
         self.embedding = Embedding(vocab_size, hidden_size)
@@ -598,7 +597,7 @@ class DeepSeekV3Model(Module):
             x = layer(x, position)
 
         # 最终归一化 + LM 头
-        return self.lm_head(self.final_norm(x))   # (1, vocab_size)
+        return self.lm_head(self.final_norm(x))  # (1, vocab_size)
 
     def generate(self, prompt_ids: list, max_new_tokens: int = 5) -> list:
         """自回归文本生成（贪心解码）。
@@ -637,7 +636,7 @@ class DeepSeekV3Model(Module):
     def print_architecture(self):
         """打印模型架构摘要。"""
         attn0 = self.layers[0].attention
-        moe0  = self.layers[0].moe
+        moe0 = self.layers[0].moe
         n_r = len(moe0.routed_experts)
         n_s = len(moe0.shared_experts)
         print(f"  Embedding:       vocab={self.vocab_size}, dim={self.hidden_size}")
@@ -679,16 +678,16 @@ def main():
 
     model = DeepSeekV3Model(
         vocab_size=100,
-        hidden_size=64,            # 真实: 7168
-        num_layers=2,              # 真实: 61
-        num_heads=4,               # 真实: 128
-        head_dim=16,               # 真实: 128
-        kv_lora_rank=32,           # 真实: 512  ← MLA KV 缓存压缩维度
-        q_lora_rank=32,            # 真实: 1536
-        moe_intermediate_size=128, # 真实: 2048
-        num_routed_experts=8,      # 真实: 256
-        num_shared_experts=1,      # 真实: 1
-        top_k=2                    # 真实: 8
+        hidden_size=64,  # 真实: 7168
+        num_layers=2,  # 真实: 61
+        num_heads=4,  # 真实: 128
+        head_dim=16,  # 真实: 128
+        kv_lora_rank=32,  # 真实: 512  ← MLA KV 缓存压缩维度
+        q_lora_rank=32,  # 真实: 1536
+        moe_intermediate_size=128,  # 真实: 2048
+        num_routed_experts=8,  # 真实: 256
+        num_shared_experts=1,  # 真实: 1
+        top_k=2  # 真实: 8
     )
 
     print("\n模型架构摘要：")
@@ -720,7 +719,7 @@ def main():
 
     attn = model.layers[0].attention
     kv_lora_rank = attn.kv_a_proj.out_features
-    attn_dim     = attn.attn_dim
+    attn_dim = attn.attn_dim
 
     print(f"""
   传统 MHA（每 token）：
@@ -762,7 +761,7 @@ def main():
 
     print("\n对 30 个不同隐向量做单层 MoE 前向，观察专家路由分布...")
     moe_layer = model.layers[0].moe
-    ffn_norm  = model.layers[0].ffn_norm
+    ffn_norm = model.layers[0].ffn_norm
 
     for i in range(30):
         # 构造各不相同的输入向量

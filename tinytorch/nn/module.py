@@ -6,7 +6,10 @@ Module 是所有神经网络层和模型的基类，提供参数管理、子模�
 Author: TinyAI Team
 """
 
-from typing import Dict, List, Iterator, Tuple, Optional, Any
+from typing import Dict, List, Iterator, Tuple, Optional, Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from tinytorch.nn.parameter import Parameter
 from tinytorch.autograd.tensor import Tensor
 
 
