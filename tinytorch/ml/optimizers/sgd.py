@@ -63,14 +63,13 @@ class SGD(Optimizer):
             if param.grad is None:
                 continue
             
-            # 获取梯度（grad 是 NdArray 对象）
-            grad = param.grad
+            # 复制梯度数据，避免 weight_decay 污染原始梯度
+            grad_data = list(param.grad.data)
             
             # 添加权重衰减（L2 正则化）
             if self.weight_decay > 0:
-                # 添加权重衰减：grad = grad + weight_decay * param
-                for j in range(len(grad.data)):
-                    grad.data[j] += self.weight_decay * param.value.data[j]
+                for j in range(len(grad_data)):
+                    grad_data[j] += self.weight_decay * param.value.data[j]
             
             # 使用动量
             if self.momentum > 0:
@@ -83,7 +82,7 @@ class SGD(Optimizer):
                 
                 # 更新速度：velocity = momentum * velocity + grad
                 for j in range(len(velocity.data)):
-                    velocity.data[j] = self.momentum * velocity.data[j] + grad.data[j]
+                    velocity.data[j] = self.momentum * velocity.data[j] + grad_data[j]
                 
                 # 更新参数：param = param - learning_rate * velocity
                 for j in range(len(param.value.data)):
@@ -91,7 +90,7 @@ class SGD(Optimizer):
             else:
                 # 普通 SGD: param = param - learning_rate * grad
                 for j in range(len(param.value.data)):
-                    param.value.data[j] -= self.learning_rate * grad.data[j]
+                    param.value.data[j] -= self.learning_rate * grad_data[j]
     
     def __repr__(self) -> str:
         """返回优化器的字符串表示。"""

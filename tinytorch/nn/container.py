@@ -5,9 +5,22 @@
 Author: TinyAI Team
 """
 
-from typing import List, Union
+from typing import List, Union, Iterator
 from tinytorch.nn.module import Module
 from tinytorch.autograd.tensor import Tensor
+
+
+def _indent_repr(repr_str: str, indent: str = '  ') -> str:
+    """对多行字符串表示进行缩进。
+    
+    Args:
+        repr_str: 要缩进的字符串表示
+        indent: 缩进字符串，默认为两个空格
+    
+    Returns:
+        缩进后的字符串
+    """
+    return '\n'.join(indent + line for line in repr_str.split('\n'))
 
 
 class Sequential(Module):
@@ -91,7 +104,7 @@ class Sequential(Module):
         return len(self._layers)
     
     @property
-    def layers(self):
+    def layers(self) -> List[Module]:
         """获取层列表（_layers 的别名）。"""
         return self._layers
     
@@ -106,7 +119,7 @@ class Sequential(Module):
         """
         return self._layers[idx]
     
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Module]:
         """返回层的迭代器。"""
         return iter(self._layers)
     
@@ -117,7 +130,7 @@ class Sequential(Module):
         for idx, module in enumerate(self._layers):
             mod_str = repr(module)
             # 对多行表示进行缩进
-            mod_str = '\n'.join('  ' + line for line in mod_str.split('\n'))
+            mod_str = _indent_repr(mod_str)
             lines.append(f"({idx}): {mod_str}")
         
         # 构建最终表示
@@ -196,6 +209,22 @@ class ModuleList(Module):
         """
         return self._modules_list[idx]
     
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Module]:
         """返回模块的迭代器。"""
         return iter(self._modules_list)
+    
+    def __repr__(self) -> str:
+        """返回模块列表的字符串表示。"""
+        lines = []
+        for idx, module in enumerate(self._modules_list):
+            mod_str = repr(module)
+            mod_str = _indent_repr(mod_str)
+            lines.append(f"({idx}): {mod_str}")
+        
+        main_str = f"{self.__class__.__name__}(\n"
+        if lines:
+            main_str += '\n'.join(lines)
+            main_str += '\n'
+        main_str += ')'
+        
+        return main_str

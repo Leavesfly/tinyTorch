@@ -10,5 +10,6 @@ Classes:
 
 from tinytorch.autograd.tensor import Tensor, no_grad
 from tinytorch.autograd.function import Function
+from tinytorch.autograd.graph_viz import visualize_graph, export_graph_html, extract_graph
 
-__all__ = ['Tensor', 'Function', 'no_grad']
+__all__ = ['Tensor', 'Function', 'no_grad', 'visualize_graph', 'export_graph_html', 'extract_graph']

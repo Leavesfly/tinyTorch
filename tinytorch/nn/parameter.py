@@ -56,12 +56,20 @@ class Parameter(Tensor):
         Returns:
             包含参数信息的字典
         """
+        if self.value is None:
+            return {
+                'name': self.name,
+                'value': None,
+                'shape': None,
+                'dtype': 'float32',
+                'requires_grad': self.requires_grad,
+            }
         return {
             'name': self.name,
             'value': self.value.to_list() if hasattr(self.value, 'to_list') else self.value,
             'shape': self.value.shape.dims if hasattr(self.value, 'shape') else None,
             'dtype': self.value.dtype if hasattr(self.value, 'dtype') else 'float32',
-            'requires_grad': self.requires_grad
+            'requires_grad': self.requires_grad,
         }
     
     @staticmethod

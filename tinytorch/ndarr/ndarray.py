@@ -7,9 +7,12 @@ Version: 0.1.0
 """
 
 import math
-from typing import Union, List, Tuple, Any
+from typing import Union, List, Tuple, Any, Callable
 from tinytorch.ndarr.shape import Shape
 from tinytorch.utils import random as tt_random
+
+# Box-Muller 变换中 u1 的最小阈值，防止 math.log(0) 产生 -inf
+_BOX_MULLER_MIN_U1 = 1e-10
 
 
 class NdArray:
@@ -46,7 +49,7 @@ class NdArray:
         
         # 处理标量输入
         if isinstance(data, (int, float)):
-            self.data = [float(data) if dtype == 'float32' else int(data)]
+            self.data = [self._cast(data)]
             self.shape = Shape((1,)) if shape is None else shape
             return
         
@@ -67,11 +70,27 @@ class NdArray:
                 if len(data) != shape.size:
                     raise ValueError(f"Data size {len(data)} doesn't match shape size {shape.size}")
             
-            self.data = [float(x) if dtype == 'float32' else int(x) for x in data]
+            self.data = [self._cast(x) for x in data]
             return
         
         raise ValueError(f"Unsupported data type: {type(data)}")
-    
+
+    def _cast(self, value) -> Union[float, int]:
+        """将单个值转换为当前 dtype 对应的 Python 类型。"""
+        return float(value) if self.dtype == 'float32' else int(value)
+
+    @staticmethod
+    def _cast_value(value, dtype: str) -> Union[float, int]:
+        """将单个值转换为指定 dtype 对应的 Python 类型（静态版本）。"""
+        return float(value) if dtype == 'float32' else int(value)
+
+    @staticmethod
+    def _ensure_shape(shape: Union[Tuple[int, ...], 'Shape']) -> 'Shape':
+        """确保 shape 参数是 Shape 对象。"""
+        if isinstance(shape, tuple):
+            return Shape(shape)
+        return shape
+
     @staticmethod
     def _from_nested_list(nested_list: List, dtype: str) -> Tuple[Shape, List]:
         """将嵌套列表转换为扁平列表并推断形状。
@@ -112,7 +131,7 @@ class NdArray:
                 if isinstance(item, list):
                     result.extend(flatten(item))
                 else:
-                    result.append(float(item) if dtype == 'float32' else int(item))
+                    result.append(NdArray._cast_value(item, dtype))
             return result
         
         shape = Shape(get_shape(nested_list))
@@ -137,9 +156,9 @@ class NdArray:
             >>> print(t.shape)
             (2, 3)
         """
-        if isinstance(shape, tuple):
-            shape = Shape(shape)
-        data = [0.0 if dtype == 'float32' else 0] * shape.size
+        shape = NdArray._ensure_shape(shape)
+        fill_value = 0.0 if dtype == 'float32' else 0
+        data = [fill_value] * shape.size
         return NdArray(data, shape, dtype)
     
     @staticmethod
@@ -153,9 +172,9 @@ class NdArray:
         Returns:
             全一张量
         """
-        if isinstance(shape, tuple):
-            shape = Shape(shape)
-        data = [1.0 if dtype == 'float32' else 1] * shape.size
+        shape = NdArray._ensure_shape(shape)
+        fill_value = 1.0 if dtype == 'float32' else 1
+        data = [fill_value] * shape.size
         return NdArray(data, shape, dtype)
     
     @staticmethod
@@ -170,8 +189,7 @@ class NdArray:
         Returns:
             随机张量
         """
-        if isinstance(shape, tuple):
-            shape = Shape(shape)
+        shape = NdArray._ensure_shape(shape)
         
         rng = tt_random.generator(seed) if seed is not None else tt_random
         
@@ -180,8 +198,10 @@ class NdArray:
         for _ in range(shape.size):
             u1 = rng.random()
             u2 = rng.random()
+            # 将 u1 钳位到安全范围，防止 math.log(0) 产生 -inf
+            u1 = max(u1, _BOX_MULLER_MIN_U1)
             z0 = math.sqrt(-2.0 * math.log(u1)) * math.cos(2.0 * math.pi * u2)
-            data.append(float(z0) if dtype == 'float32' else int(z0))
+            data.append(NdArray._cast_value(z0, dtype))
         
         return NdArray(data, shape, dtype)
     
@@ -200,18 +220,37 @@ class NdArray:
         Returns:
             均匀分布随机张量
         """
-        if isinstance(shape, tuple):
-            shape = Shape(shape)
+        shape = NdArray._ensure_shape(shape)
         
         rng = tt_random.generator(seed) if seed is not None else tt_random
 
-        data = [rng.uniform(low, high) for _ in range(shape.size)]
-        if dtype == 'int32':
-            data = [int(x) for x in data]
+        data = [NdArray._cast_value(rng.uniform(low, high), dtype) for _ in range(shape.size)]
         
         return NdArray(data, shape, dtype)
     
     # ==================== 基本运算 ====================
+    
+    def _elementwise_op(self, other: 'NdArray', op_name: str, op_func) -> 'NdArray':
+        """逐元素二元运算的通用实现（处理广播）。
+        
+        Args:
+            other: 右操作数
+            op_name: 运算名称（用于错误信息）
+            op_func: 二元运算函数 (x, y) -> result
+        """
+        if not isinstance(other, NdArray):
+            raise TypeError(f"Unsupported type for {op_name}: {type(other)}")
+        
+        if self.shape == other.shape:
+            result_data = [op_func(x, y) for x, y in zip(self.data, other.data)]
+            return NdArray(result_data, self.shape, self.dtype)
+        
+        broadcast_shape = self.shape.broadcast_with(other.shape)
+        t1_broadcast = self._broadcast_to(broadcast_shape)
+        t2_broadcast = other._broadcast_to(broadcast_shape)
+        
+        result_data = [op_func(x, y) for x, y in zip(t1_broadcast.data, t2_broadcast.data)]
+        return NdArray(result_data, broadcast_shape, self.dtype)
     
     def add(self, other: Union['NdArray', float, int]) -> 'NdArray':
         """逐元素加法。
@@ -225,92 +264,40 @@ class NdArray:
         if isinstance(other, (int, float)):
             result_data = [x + other for x in self.data]
             return NdArray(result_data, self.shape, self.dtype)
-        
-        if not isinstance(other, NdArray):
-            raise TypeError(f"Unsupported type for add: {type(other)}")
-        
-        # 处理广播
-        if self.shape == other.shape:
-            result_data = [x + y for x, y in zip(self.data, other.data)]
-            return NdArray(result_data, self.shape, self.dtype)
-        
-        # 广播情况
-        broadcast_shape = self.shape.broadcast_with(other.shape)
-        t1_broadcast = self._broadcast_to(broadcast_shape)
-        t2_broadcast = other._broadcast_to(broadcast_shape)
-        
-        result_data = [x + y for x, y in zip(t1_broadcast.data, t2_broadcast.data)]
-        return NdArray(result_data, broadcast_shape, self.dtype)
+        return self._elementwise_op(other, 'add', lambda x, y: x + y)
     
     def sub(self, other: Union['NdArray', float, int]) -> 'NdArray':
         """逐元素减法。"""
         if isinstance(other, (int, float)):
             result_data = [x - other for x in self.data]
             return NdArray(result_data, self.shape, self.dtype)
-        
-        if not isinstance(other, NdArray):
-            raise TypeError(f"Unsupported type for sub: {type(other)}")
-        
-        if self.shape == other.shape:
-            result_data = [x - y for x, y in zip(self.data, other.data)]
-            return NdArray(result_data, self.shape, self.dtype)
-        
-        broadcast_shape = self.shape.broadcast_with(other.shape)
-        t1_broadcast = self._broadcast_to(broadcast_shape)
-        t2_broadcast = other._broadcast_to(broadcast_shape)
-        
-        result_data = [x - y for x, y in zip(t1_broadcast.data, t2_broadcast.data)]
-        return NdArray(result_data, broadcast_shape, self.dtype)
+        return self._elementwise_op(other, 'sub', lambda x, y: x - y)
     
     def mul(self, other: Union['NdArray', float, int]) -> 'NdArray':
         """逐元素乘法。"""
         if isinstance(other, (int, float)):
             result_data = [x * other for x in self.data]
             return NdArray(result_data, self.shape, self.dtype)
-        
-        if not isinstance(other, NdArray):
-            raise TypeError(f"Unsupported type for mul: {type(other)}")
-        
-        if self.shape == other.shape:
-            result_data = [x * y for x, y in zip(self.data, other.data)]
-            return NdArray(result_data, self.shape, self.dtype)
-        
-        broadcast_shape = self.shape.broadcast_with(other.shape)
-        t1_broadcast = self._broadcast_to(broadcast_shape)
-        t2_broadcast = other._broadcast_to(broadcast_shape)
-        
-        result_data = [x * y for x, y in zip(t1_broadcast.data, t2_broadcast.data)]
-        return NdArray(result_data, broadcast_shape, self.dtype)
+        return self._elementwise_op(other, 'mul', lambda x, y: x * y)
     
     def div(self, other: Union['NdArray', float, int]) -> 'NdArray':
-        """逐元素除法。"""
+        """逐元素除法。
+
+        除零行为与主流框架一致：返回 inf/-inf/nan 而非抛出异常。
+        """
         if isinstance(other, (int, float)):
             if other == 0:
-                raise ValueError("Division by zero")
-            result_data = [x / other for x in self.data]
+                result_data = [math.copysign(math.inf, x) if x != 0 else math.nan for x in self.data]
+            else:
+                result_data = [x / other for x in self.data]
             return NdArray(result_data, self.shape, self.dtype)
         
-        if not isinstance(other, NdArray):
-            raise TypeError(f"Unsupported type for div: {type(other)}")
-        
-        if self.shape == other.shape:
-            result_data = []
-            for x, y in zip(self.data, other.data):
-                if y == 0:
-                    raise ValueError("Division by zero")
-                result_data.append(x / y)
-            return NdArray(result_data, self.shape, self.dtype)
-        
-        broadcast_shape = self.shape.broadcast_with(other.shape)
-        t1_broadcast = self._broadcast_to(broadcast_shape)
-        t2_broadcast = other._broadcast_to(broadcast_shape)
-        
-        result_data = []
-        for x, y in zip(t1_broadcast.data, t2_broadcast.data):
+        def safe_div(x, y):
             if y == 0:
-                raise ValueError("Division by zero")
-            result_data.append(x / y)
-        return NdArray(result_data, broadcast_shape, self.dtype)
+                return math.copysign(math.inf, x) if x != 0 else math.nan
+            return x / y
+        
+        return self._elementwise_op(other, 'div', safe_div)
     
     def neg(self) -> 'NdArray':
         """取负。"""
@@ -342,10 +329,11 @@ class NdArray:
             if k1 != k2:
                 raise ValueError(f"Incompatible shapes for matmul: {self.shape.dims} and {other.shape.dims}")
             
-            result_data = [0.0] * (m * n)
+            zero_val = 0.0 if self.dtype == 'float32' else 0
+            result_data = [zero_val] * (m * n)
             for i in range(m):
                 for j in range(n):
-                    sum_val = 0.0
+                    sum_val = zero_val
                     for k in range(k1):
                         sum_val += self.data[i * k1 + k] * other.data[k * n + j]
                     result_data[i * n + j] = sum_val
@@ -655,28 +643,21 @@ class NdArray:
         ndim_diff = target_shape.ndim - self.shape.ndim
         source_dims = (1,) * ndim_diff + self.shape.dims
         
+        # 预计算源 strides，避免在循环内反复创建 Shape 对象
+        src_strides = self.shape.strides
+        
         result_data = [0.0] * target_shape.size
         
         for i in range(target_shape.size):
             target_indices = self._linear_to_indices(i, target_shape)
             
-            # 映射到源索引（广播规则）
-            source_indices = []
-            for j, (src_dim, tgt_idx) in enumerate(zip(source_dims, target_indices)):
-                if src_dim == 1:
-                    source_indices.append(0)
-                else:
-                    source_indices.append(tgt_idx)
-            
-            # 获取源线性索引
-            temp_shape = Shape(source_dims)
-            src_linear_idx = temp_shape.linear_index(tuple(source_indices))
-            
-            # 映射回原始数据
-            if ndim_diff > 0:
-                # 需要调整填充
-                orig_indices = source_indices[ndim_diff:]
-                src_linear_idx = self.shape.linear_index(tuple(orig_indices))
+            # 直接映射到原始数据索引，跳过中间 Shape 创建
+            src_linear_idx = 0
+            for j in range(self.shape.ndim):
+                src_dim = source_dims[ndim_diff + j]
+                tgt_idx = target_indices[ndim_diff + j]
+                if src_dim != 1:
+                    src_linear_idx += tgt_idx * src_strides[j]
             
             result_data[i] = self.data[src_linear_idx]
         

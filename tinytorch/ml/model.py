@@ -6,7 +6,7 @@ Author: TinyAI Team
 """
 
 import pickle
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Iterator, Tuple
 from tinytorch.nn.module import Module
 from tinytorch.nn.parameter import Parameter
 from tinytorch.autograd.tensor import Tensor
@@ -34,7 +34,7 @@ class Model:
         >>> loaded_model = Model.load('model.pkl')
     """
     
-    def __init__(self, name: str, module: Module):
+    def __init__(self, name: str, module: Module) -> None:
         """初始化模型。
         
         Args:
@@ -79,7 +79,7 @@ class Model:
         """
         return self.module.parameters()
     
-    def named_parameters(self):
+    def named_parameters(self) -> Iterator[Tuple[str, Parameter]]:
         """获取所有参数的名称和值。
         
         Returns:
@@ -129,6 +129,15 @@ class Model:
         
         Returns:
             Model 实例
+        
+        Note:
+            为什么需要传入 module 参数：
+            模型文件只保存了参数的状态字典（state_dict），不包含模型的结构定义。
+            为了恢复模型，必须先构建一个与保存时相同结构的模块实例，然后将参数加载进去。
+            这样设计的好处是：
+            1. 模型文件更小，只保存参数不保存代码结构
+            2. 允许在加载时修改模型结构（如加载到不同架构的模型）
+            3. 避免了序列化整个模型对象带来的安全和兼容性问题
         """
         with open(file_path, 'rb') as f:
             model_state = pickle.load(f)

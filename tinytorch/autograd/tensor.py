@@ -15,7 +15,7 @@ class Tensor:
 
     """自动微分变量。
     
-    Variable 包装了一个 Tensor，并为自动微分维护梯度信息和计算图连接。
+    Tensor 包装了一个 NdArray，并为自动微分维护梯度信息和计算图连接。
     
     属性:
         value: 张量值
@@ -86,6 +86,10 @@ class Tensor:
         
         # 迭代式拓扑排序，避免深图递归栈溢出
         topo_order = []
+        # visit_state 字典记录节点的访问状态：
+        # 0: 未访问 - 节点尚未被处理
+        # 1: 访问中 - 节点正在被处理（已在栈中，正在遍历其输入）
+        # 2: 已完成 - 节点及其所有输入都已处理完毕
         visit_state = {}  # 0: 未访问, 1: 访问中, 2: 已完成
         stack = [self]
 
@@ -156,42 +160,44 @@ class Tensor:
         """
         return Tensor(self.value.copy(), self.name + "_detached", requires_grad=False)
     
+    # ==================== 辅助方法 ====================
+
+    @staticmethod
+    def _ensure_tensor(value: Union["Tensor", int, float]) -> 'Tensor':
+        """将标量值转换为不跟踪梯度的 Tensor。
+
+        如果 value 已经是 Tensor 则直接返回，否则将 int/float 包装为 Tensor。
+        """
+        if isinstance(value, Tensor):
+            return value
+        if isinstance(value, (int, float)):
+            return Tensor(NdArray([value]), requires_grad=False)
+        raise TypeError(f"Cannot convert {type(value)} to Tensor")
+
     # ==================== 算术运算 ====================
     
-    def add(self, other) -> 'Tensor':
+    def add(self, other: Union["Tensor", int, float]) -> 'Tensor':
         """加法运算。"""
         from tinytorch.autograd.ops.basic import Add
-        
-        if isinstance(other, (int, float)):
-            other = Tensor(NdArray([other]), requires_grad=False)
-        
+        other = self._ensure_tensor(other)
         return Add()(self, other)
     
-    def sub(self, other) -> 'Tensor':
+    def sub(self, other: Union["Tensor", int, float]) -> 'Tensor':
         """减法运算。"""
         from tinytorch.autograd.ops.basic import Sub
-        
-        if isinstance(other, (int, float)):
-            other = Tensor(NdArray([other]), requires_grad=False)
-        
+        other = self._ensure_tensor(other)
         return Sub()(self, other)
     
-    def mul(self, other) -> 'Tensor':
+    def mul(self, other: Union["Tensor", int, float]) -> 'Tensor':
         """乘法运算。"""
         from tinytorch.autograd.ops.basic import Mul
-        
-        if isinstance(other, (int, float)):
-            other = Tensor(NdArray([other]), requires_grad=False)
-        
+        other = self._ensure_tensor(other)
         return Mul()(self, other)
     
-    def div(self, other) -> 'Tensor':
+    def div(self, other: Union["Tensor", int, float]) -> 'Tensor':
         """除法运算。"""
         from tinytorch.autograd.ops.basic import Div
-        
-        if isinstance(other, (int, float)):
-            other = Tensor(NdArray([other]), requires_grad=False)
-        
+        other = self._ensure_tensor(other)
         return Div()(self, other)
     
     def neg(self) -> 'Tensor':
@@ -264,7 +270,7 @@ class Tensor:
         """Tanh 激活函数。"""
         from tinytorch.autograd.ops.activation import Tanh
         return Tanh()(self)
-
+    
     def leaky_relu(self, negative_slope: float = 0.01) -> 'Tensor':
         """LeakyReLU 激活函数。"""
         from tinytorch.autograd.ops.activation import LeakyReLU
@@ -318,8 +324,7 @@ class Tensor:
     
     def __rsub__(self, other):
         """右减法运算符。"""
-        if isinstance(other, (int, float)):
-            other = Tensor(NdArray([other]), requires_grad=False)
+        other = self._ensure_tensor(other)
         return other.sub(self)
     
     def __mul__(self, other):
@@ -336,8 +341,7 @@ class Tensor:
     
     def __rtruediv__(self, other):
         """右除法运算符。"""
-        if isinstance(other, (int, float)):
-            other = Tensor(NdArray([other]), requires_grad=False)
+        other = self._ensure_tensor(other)
         return other.div(self)
     
     def __neg__(self):
@@ -363,7 +367,20 @@ class Tensor:
 
 
 class _NoGrad:
-    """禁用自动梯度追踪的上下文管理器。"""
+    """禁用自动梯度追踪的上下文管理器。
+    
+    此上下文管理器用于临时禁用梯度计算，适用于推理阶段或不需要梯度的计算。
+    
+    使用方式:
+        >>> with no_grad():
+        ...     # 在此块内的所有操作都不会跟踪梯度
+        ...     y = x * 2
+    
+    注意:
+        - 此上下文管理器可以嵌套使用
+        - 退出上下文后会恢复之前的梯度追踪状态
+        - 不影响 requires_grad=False 的 Tensor
+    """
 
     def __enter__(self):
         self._previous = Tensor._grad_enabled

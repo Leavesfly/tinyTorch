@@ -12,6 +12,7 @@ from tinytorch.ml.model import Model
 from tinytorch.ml.trainer import Trainer
 from tinytorch.ml.dataset import DataSet
 from tinytorch.ml.monitor import Monitor, EarlyStopping
+from tinytorch.ml.visualizer import TrainingVisualizer
 from tinytorch.ml import optimizers
 from tinytorch.ml import losses
 from tinytorch.ml import evaluators
@@ -32,6 +33,7 @@ __all__ = [
     'DataSet',
     'Monitor',
     'EarlyStopping',
+    'TrainingVisualizer',
     'Optimizer',
     'SGD',
     'Adam',

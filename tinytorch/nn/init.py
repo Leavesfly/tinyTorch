@@ -6,6 +6,7 @@ Author: TinyAI Team
 """
 
 import math
+from typing import Tuple
 from tinytorch.ndarr.ndarray import NdArray
 from tinytorch.nn.parameter import Parameter
 from tinytorch.utils import random as tt_random
@@ -45,11 +46,7 @@ def uniform(a: float, b: float, shape, dtype: str = 'float32') -> NdArray:
     Returns:
         初始化后的新张量
     """
-    from tinytorch.ndarr.shape import Shape
-    if isinstance(shape, tuple):
-        shape = Shape(shape)
-    data = [tt_random.uniform(a, b) for _ in range(shape.size)]
-    return NdArray(data, shape, dtype)
+    return NdArray.uniform(a, b, shape, dtype=dtype)
 
 
 def uniform_(tensor: NdArray, a: float = 0.0, b: float = 1.0) -> NdArray:
@@ -205,7 +202,7 @@ def kaiming_normal_(tensor: NdArray, a: float = 0, mode: str = 'fan_in',
     return normal_(tensor, 0.0, std)
 
 
-def _calculate_fan_in_and_fan_out(tensor: NdArray) -> tuple:
+def _calculate_fan_in_and_fan_out(tensor: NdArray) -> 'Tuple[int, int]':
     """计算张量的 fan_in 和 fan_out。
     
     对于二维张量（权重矩阵）：

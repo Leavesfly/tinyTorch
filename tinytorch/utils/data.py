@@ -1,4 +1,10 @@
-"""PyTorch 风格的数据工具。"""
+"""PyTorch 风格的数据工具。
+
+线程安全说明：
+- 本模块中的所有类和函数都是单进程设计，不支持多线程并发访问
+- DataLoader 当前仅支持 num_workers=0，不支持多进程数据加载
+- 如需多线程安全的数据加载，请使用外部线程安全的数据源
+"""
 
 import math
 from typing import Iterable, Iterator, List, Mapping, Sequence, Tuple, Optional, Any
@@ -38,7 +44,7 @@ class Sampler:
 class SequentialSampler(Sampler):
     """顺序采样器。"""
 
-    def __init__(self, dataset: Dataset):
+    def __init__(self, dataset: Dataset) -> None:
         self.dataset = dataset
 
     def __iter__(self) -> Iterator[int]:
@@ -51,7 +57,7 @@ class SequentialSampler(Sampler):
 class RandomSampler(Sampler):
     """随机无放回采样器。"""
 
-    def __init__(self, dataset: Dataset):
+    def __init__(self, dataset: Dataset) -> None:
         self.dataset = dataset
 
     def __iter__(self) -> Iterator[int]:
@@ -66,7 +72,7 @@ class RandomSampler(Sampler):
 class BatchSampler(Sampler):
     """包装采样器以生成批次索引。"""
 
-    def __init__(self, sampler: Sampler, batch_size: int, drop_last: bool):
+    def __init__(self, sampler: Sampler, batch_size: int, drop_last: bool) -> None:
         if batch_size <= 0:
             raise ValueError("batch_size must be positive")
         self.sampler = sampler
@@ -94,7 +100,12 @@ def _unflatten(data: List, dims: Tuple[int, ...]) -> Any:
         return data[0]
     if len(dims) == 1:
         return data[: dims[0]]
-    step = int(len(data) / dims[0])
+    expected_size = 1
+    for dim in dims:
+        expected_size *= dim
+    if len(data) != expected_size:
+        raise ValueError(f"Data size {len(data)} does not match shape {dims} (expected {expected_size})")
+    step = len(data) // dims[0]
     return [
         _unflatten(data[i * step : (i + 1) * step], dims[1:])
         for i in range(dims[0])
@@ -106,7 +117,31 @@ def _tensor_to_nested_list(tensor: NdArray) -> List:
 
 
 def default_collate(batch: List[Any]) -> Any:
-    """默认的 collate 函数，与 PyTorch 行为一致。"""
+    """默认的 collate 函数，与 PyTorch 行为一致。
+    
+    将一个样本列表合并为一个批次。支持多种数据类型：
+    - NdArray: 堆叠为更高维度的张量
+    - Tensor: 递归合并其值并保持梯度信息
+    - 数值类型 (int, float): 转换为 NdArray
+    - Mapping (dict): 对每个键递归合并对应的值
+    - 字符串类型 (str, bytes): 保持为列表
+    - namedtuple: 递归合并每个字段
+    - Sequence: 转置后递归合并每个元素
+    
+    Args:
+        batch: 样本列表，每个样本可以是任意类型
+        
+    Returns:
+        合并后的批次数据，类型取决于输入类型
+        
+    Raises:
+        ValueError: 当序列类型样本长度不一致时
+        
+    Example:
+        >>> batch = [[1, 2], [3, 4], [5, 6]]
+        >>> result = default_collate(batch)
+        >>> # 返回 NdArray([[1, 2], [3, 4], [5, 6]])
+    """
     if not batch:
         return batch
     elem = batch[0]
@@ -127,12 +162,18 @@ def default_collate(batch: List[Any]) -> Any:
         if not all(len(elem) == len(sample) for sample in batch):
             raise ValueError("All sequences in a batch must have the same size")
         transposed = zip(*batch)
-        return [default_collate(samples) for samples in transposed]
+        return [default_collate(list(samples)) for samples in transposed]
     return batch
 
 
 class DataLoader:
-    """PyTorch 风格的数据加载器（单进程）。"""
+    """PyTorch 风格的数据加载器（单进程）。
+    
+    线程安全说明：
+    - 本类不支持多线程并发访问
+    - 迭代器不是线程安全的，不能在多个线程中同时使用
+    - 如果需要多线程数据加载，请在外部实现线程安全机制
+    """
 
     def __init__(
         self,
@@ -142,10 +183,10 @@ class DataLoader:
         sampler: Optional[Sampler] = None,
         batch_sampler: Optional[Sampler] = None,
         drop_last: bool = False,
-        collate_fn=default_collate,
+        collate_fn: Any = default_collate,
         num_workers: int = 0,
         pin_memory: bool = False,
-    ):
+    ) -> None:
         if num_workers != 0:
             raise NotImplementedError("num_workers > 0 is not supported yet")
         if pin_memory:

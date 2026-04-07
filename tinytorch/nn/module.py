@@ -162,7 +162,17 @@ class Module:
                 yield from module.named_parameters(prefix=module_prefix, recursive=True)
 
     def named_buffers(self, prefix: str = '', recursive: bool = True) -> Iterator[Tuple[str, Tensor]]:
-        """获取所有缓冲区的名称和值。"""
+        """获取所有缓冲区的名称和值。
+        
+        缓冲区是不可训练的张量，通常用于存储运行时状态（如 BatchNorm 的均值和方差）。
+        
+        Args:
+            prefix: 缓冲区名称的前缀，用于递归时构建完整名称
+            recursive: 是否递归获取子模块的缓冲区
+        
+        Yields:
+            (缓冲区名称, 缓冲区值) 的元组，其中名称包含完整路径
+        """
         for name, buffer in self._buffers.items():
             full_name = f"{prefix}.{name}" if prefix else name
             yield (full_name, buffer)
@@ -228,47 +238,53 @@ class Module:
         for param in self.parameters():
             param.clear_grad()
     
+    def _clear_registries(self, name: str, *, keep: Optional[str] = None) -> None:
+        """从注册表中移除指定名称的条目。
+
+        Args:
+            name: 要清理的属性名称
+            keep: 需要保留的注册表类型（'module'/'parameter'/'buffer'），不会被清理
+        """
+        registry_map = {
+            'module': ('_modules', self.register_module),
+            'parameter': ('_parameters', self.register_parameter),
+            'buffer': ('_buffers', self.register_buffer),
+        }
+        for kind, (attr, register_fn) in registry_map.items():
+            if kind == keep:
+                continue
+            registry = self.__dict__.get(attr)
+            if registry is not None and name in registry:
+                register_fn(name, None)
+
     def __setattr__(self, name: str, value: Any) -> None:
         """设置属性，自动注册模块和参数。
-        
+
+        设计意图：
+        当赋值为 Module/Parameter 时自动注册到对应注册表，同时清理其他注册表中同名的旧条目，
+        保持一致性。这样可以确保：
+        1. 子模块和参数会被自动追踪，便于参数管理和序列化
+        2. 避免同名冲突，保证每个名称只在一个注册表中存在
+        3. 简化用户代码，无需手动调用 register_module/register_parameter
+
         Args:
             name: 属性名称
             value: 属性值
         """
-        # 延迟导入避免循环依赖
         from tinytorch.nn.parameter import Parameter
 
-        modules = self.__dict__.get('_modules')
-        parameters = self.__dict__.get('_parameters')
-        buffers = self.__dict__.get('_buffers')
-        
-        # 如果是特殊属性（以下划线开头），直接设置
         if name.startswith('_'):
             object.__setattr__(self, name, value)
-        # 如果是 Module 实例，注册为子模块
         elif isinstance(value, Module):
-            if parameters is not None and name in parameters:
-                self.register_parameter(name, None)
-            if buffers is not None and name in buffers:
-                self.register_buffer(name, None)
+            self._clear_registries(name, keep='module')
             self.register_module(name, value)
             object.__setattr__(self, name, value)
-        # 如果是 Parameter 实例，注册为参数
         elif isinstance(value, Parameter):
-            if modules is not None and name in modules:
-                self.register_module(name, None)
-            if buffers is not None and name in buffers:
-                self.register_buffer(name, None)
+            self._clear_registries(name, keep='parameter')
             self.register_parameter(name, value)
             object.__setattr__(self, name, value)
         else:
-            # 覆盖已有参数/模块/缓冲区时，保持注册表与属性一致。
-            if modules is not None and name in modules:
-                self.register_module(name, None)
-            if parameters is not None and name in parameters:
-                self.register_parameter(name, None)
-            if buffers is not None and name in buffers:
-                self.register_buffer(name, None)
+            self._clear_registries(name)
             object.__setattr__(self, name, value)
 
     def __delattr__(self, name: str) -> None:
@@ -316,7 +332,23 @@ class Module:
         }
 
     def state_dict(self) -> Dict[str, Dict[str, Any]]:
-        """返回扁平化的参数/缓冲区状态。"""
+        """返回扁平化的参数/缓冲区状态。
+
+        State Dict 结构：
+        {
+            'param_name': {
+                'kind': 'parameter' | 'buffer',
+                'value': [...],  # 张量的值列表
+                'shape': [...],  # 张量的形状维度
+                'dtype': dtype,  # 数据类型
+                'requires_grad': bool  # 是否需要梯度
+            },
+            ...
+        }
+
+        Returns:
+            扁平化的状态字典，键为参数/缓冲区的完整名称，值为包含元数据的字典
+        """
         state = {}
         for name, param in self.named_parameters():
             state[name] = self._tensor_state(param, kind='parameter')
@@ -325,7 +357,34 @@ class Module:
         return state
 
     def load_state_dict(self, state_dict: Dict[str, Dict[str, Any]], strict: bool = True) -> Dict[str, List[str]]:
-        """从扁平化状态字典加载参数和缓冲区。"""
+        """从扁平化状态字典加载参数和缓冲区。
+
+        State Dict 结构：
+        {
+            'param_name': {
+                'kind': 'parameter' | 'buffer',
+                'value': [...],  # 张量的值列表
+                'shape': [...],  # 张量的形状维度
+                'dtype': dtype,  # 数据类型
+                'requires_grad': bool  # 是否需要梯度
+            },
+            ...
+        }
+
+        Args:
+            state_dict: 要加载的状态字典
+            strict: 是否严格匹配，True 时缺失或意外的键会抛出异常
+
+        Returns:
+            包含缺失键和意外键的字典：
+            {
+                'missing_keys': [...],  # 模型中存在但 state_dict 中缺失的键
+                'unexpected_keys': [...]  # state_dict 中存在但模型中不存在的键
+            }
+
+        Raises:
+            KeyError: 当 strict=True 且存在缺失键或意外键时
+        """
         from tinytorch.ndarr.ndarray import NdArray
         from tinytorch.ndarr.shape import Shape
 
@@ -347,6 +406,8 @@ class Module:
                 continue
             entry = state_dict[name]
             param.value = _load_tensor(entry, param.value)
+            if 'requires_grad' in entry:
+                param.requires_grad = entry['requires_grad']
 
         for name, buffer in expected_buffers.items():
             if name not in state_dict:
@@ -354,6 +415,8 @@ class Module:
                 continue
             entry = state_dict[name]
             buffer.value = _load_tensor(entry, buffer.value)
+            if 'requires_grad' in entry:
+                buffer.requires_grad = entry['requires_grad']
 
         for key in state_dict:
             if key not in expected_keys:

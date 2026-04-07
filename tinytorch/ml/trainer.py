@@ -11,6 +11,7 @@ from tinytorch.ml.dataset import DataSet
 from tinytorch.ml.optimizers.optimizer import Optimizer
 from tinytorch.ml.losses.loss import Loss
 from tinytorch.autograd.tensor import Tensor
+from tinytorch.ml.visualizer import TrainingVisualizer
 
 
 class Trainer:
@@ -55,7 +56,8 @@ class Trainer:
     def __init__(self, model: Model, dataset: DataSet, 
                  optimizer: Optimizer, loss_fn: Loss,
                  max_epochs: int = 10, print_interval: int = 10,
-                 val_dataset: Optional[DataSet] = None):
+                 val_dataset: Optional[DataSet] = None,
+                 visualizer: Optional[TrainingVisualizer] = None):
         """初始化训练器。
         
         Args:
@@ -66,6 +68,7 @@ class Trainer:
             max_epochs: 最大训练轮次
             print_interval: 打印间隔
             val_dataset: 验证数据集（可选）
+            visualizer: 训练可视化器（可选），传入后训练过程将实时推送数据到 Web 界面
         """
         self.model = model
         self.dataset = dataset
@@ -74,6 +77,7 @@ class Trainer:
         self.max_epochs = max_epochs
         self.print_interval = print_interval
         self.val_dataset = val_dataset
+        self.visualizer = visualizer
         
         # 训练历史
         self.train_losses = []
@@ -86,12 +90,16 @@ class Trainer:
         print(f"训练轮次: {self.max_epochs}")
         print("-" * 60)
         
+        if self.visualizer:
+            self.visualizer.begin_training()
+        
         for epoch in range(self.max_epochs):
             # 训练一个 epoch
             epoch_loss = self.train_epoch(epoch)
             self.train_losses.append(epoch_loss)
             
             # 验证
+            val_loss = None
             if self.val_dataset is not None:
                 val_loss = self.validate()
                 self.val_losses.append(val_loss)
@@ -100,6 +108,13 @@ class Trainer:
             else:
                 print(f"Epoch [{epoch+1}/{self.max_epochs}] "
                       f"Train Loss: {epoch_loss:.6f}")
+            
+            # 推送数据到可视化器
+            if self.visualizer:
+                self.visualizer.record_epoch(epoch, train_loss=epoch_loss, val_loss=val_loss)
+        
+        if self.visualizer:
+            self.visualizer.finalize()
         
         print("-" * 60)
         print("训练完成!")

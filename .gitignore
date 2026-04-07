@@ -39,6 +39,7 @@ pip-delete-this-directory.txt
 htmlcov/
 .tox/
 .nox/
+.qoder/
 .coverage
 .coverage.*
 .cache
@@ -52,6 +53,8 @@ coverage.xml
 # Translations
 *.mo
 *.pot
+
+tinytorch.egg-info/
 
 # Django stuff:
 *.log

@@ -83,20 +83,21 @@ class Adam(Optimizer):
                 continue
             
             param_id = id(param)
-            grad = param.grad  # 获取梯度（grad 是 NdArray 对象）
+            # 复制梯度数据，避免 weight_decay 污染原始梯度
+            grad_data = list(param.grad.data)
             
-            # 权重衰减
+            # 权重衰减（L2 正则化添加到梯度副本上）
             if self.weight_decay != 0:
-                for i in range(len(grad.data)):
-                    grad.data[i] += self.weight_decay * param.value.data[i]
+                for i in range(len(grad_data)):
+                    grad_data[i] += self.weight_decay * param.value.data[i]
             
             # 更新一阶矩和二阶矩
             for i in range(len(param.value.data)):
                 # 更新一阶矩：m_t = beta1 * m_{t-1} + (1 - beta1) * grad
-                self.m[param_id][i] = self.beta1 * self.m[param_id][i] + (1 - self.beta1) * grad.data[i]
+                self.m[param_id][i] = self.beta1 * self.m[param_id][i] + (1 - self.beta1) * grad_data[i]
                 
                 # 更新二阶矩：v_t = beta2 * v_{t-1} + (1 - beta2) * grad^2
-                self.v[param_id][i] = self.beta2 * self.v[param_id][i] + (1 - self.beta2) * grad.data[i] ** 2
+                self.v[param_id][i] = self.beta2 * self.v[param_id][i] + (1 - self.beta2) * grad_data[i] ** 2
             
             # 偏差修正
             bias_correction1 = 1 - self.beta1 ** self.t

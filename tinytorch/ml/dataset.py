@@ -5,7 +5,7 @@
 Author: TinyAI Team
 """
 
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Any, Iterator
 from tinytorch.ndarr.ndarray import NdArray
 from tinytorch.utils.data import Dataset
 from tinytorch.utils import random as tt_random
@@ -30,8 +30,8 @@ class DataSet(Dataset):
         ...     print(batch_data.shape, batch_labels.shape)
     """
     
-    def __init__(self, data: List, labels: List, batch_size: int = 32, 
-                 shuffle: bool = True):
+    def __init__(self, data: List[Any], labels: List[Any], batch_size: int = 32, 
+                 shuffle: bool = True) -> None:
         """初始化数据集。
         
         Args:
@@ -59,7 +59,7 @@ class DataSet(Dataset):
         """返回数据集大小。"""
         return len(self.data)
     
-    def __getitem__(self, index: int) -> Tuple:
+    def __getitem__(self, index: int) -> Tuple[Any, Any]:
         """获取单个样本。
         
         Args:
@@ -146,7 +146,7 @@ class DataSet(Dataset):
         
         return train_dataset, val_dataset
     
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Tuple[List[Any], List[Any]]]:
         """迭代数据集，产生批次数据。
         
         Yields:

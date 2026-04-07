@@ -20,7 +20,12 @@ Python: 3.7+
     >>> from tinytorch.ml import Model, Trainer
 """
 
-__version__ = '0.1.0'
+try:
+    from importlib.metadata import version as _pkg_version
+    __version__ = _pkg_version('tinytorch')
+except Exception:
+    __version__ = '0.1.0'
+
 __author__ = 'TinyAI Team'
 
 # 导入核心模块

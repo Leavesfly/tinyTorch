@@ -6,7 +6,7 @@ Author: TinyAI Team
 Version: 0.1.0
 """
 
-from typing import Tuple, List, Union
+from typing import Tuple, List, Union, Iterator
 
 
 class Shape:
@@ -142,6 +142,13 @@ class Shape:
     
     def broadcast_with(self, other: 'Shape') -> 'Shape':
         """计算与另一个形状广播后的形状。
+        
+        此方法根据 NumPy 广播规则计算两个形状广播后的结果形状。
+        广播规则：
+        1. 从右到左比较维度
+        2. 如果维度相等或其中一个为 1，则维度兼容
+        3. 缺失的维度视为 1
+        4. 广播后的维度取两个维度的最大值
         
         Args:
             other: 另一个 Shape 对象
@@ -297,7 +304,7 @@ class Shape:
         """Shape 的字符串表示。"""
         return str(self._dims)
     
-    def __eq__(self, other) -> bool:
+    def __eq__(self, other: object) -> bool:
         """检查与另一个 Shape 的相等性。"""
         if not isinstance(other, Shape):
             return False
@@ -311,6 +318,6 @@ class Shape:
         """通过索引获取维度大小。"""
         return self._dims[idx]
     
-    def __iter__(self):
+    def __iter__(self) -> Iterator[int]:
         """迭代维度大小。"""
         return iter(self._dims)

@@ -36,7 +36,7 @@ class Function:
         self.outputs = []
         self.saved_tensors = []
     
-    def __call__(self, *inputs):
+    def __call__(self, *inputs) -> 'Tensor':
         """调用函数（与 call 方法相同）。
         
         参数:
@@ -47,7 +47,7 @@ class Function:
         """
         return self.call(*inputs)
     
-    def call(self, *inputs):
+    def call(self, *inputs) -> 'Tensor':
         """执行前向传播并构建计算图。
         
         此方法:
@@ -129,8 +129,22 @@ class Function:
     def save_for_backward(self, *tensors: NdArray):
         """保存反向计算所需的张量。
         
+        此方法用于在前向传播期间保存张量，以便在反向传播时使用。
+        
         参数:
             *tensors: 要保存的张量
+            
+        使用约束:
+            - 必须在 forward() 方法中调用此方法
+            - 保存的张量必须是 NdArray 类型
+            - 只能在 backward() 之前调用，backward() 之后保存的张量将被清空
+            - 每次调用会覆盖之前保存的张量，如需保存多个张量请一次性传入
+            - 保存的张量在 backward() 后会自动释放，无需手动清理
+            
+        示例:
+            >>> def forward(self, x, y):
+            ...     self.save_for_backward(x, y)  # 保存输入供反向使用
+            ...     return x.add(y)
         """
         self.saved_tensors = list(tensors)
     
