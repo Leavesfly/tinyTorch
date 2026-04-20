@@ -14,6 +14,10 @@ from tinytorch.utils import random as tt_random
 # Box-Muller 变换中 u1 的最小阈值，防止 math.log(0) 产生 -inf
 _BOX_MULLER_MIN_U1 = 1e-10
 
+# math.exp 的安全阈值：超过此范围会溢出或下溢
+_EXP_OVERFLOW_THRESHOLD = 709.0
+_EXP_UNDERFLOW_THRESHOLD = -745.0
+
 
 class NdArray:
     """多维数组类，支持各种运算操作。
@@ -267,14 +271,28 @@ class NdArray:
         return self._elementwise_op(other, 'add', lambda x, y: x + y)
     
     def sub(self, other: Union['NdArray', float, int]) -> 'NdArray':
-        """逐元素减法。"""
+        """逐元素减法。
+
+        Args:
+            other: 要相减的张量或标量
+
+        Returns:
+            运算结果张量
+        """
         if isinstance(other, (int, float)):
             result_data = [x - other for x in self.data]
             return NdArray(result_data, self.shape, self.dtype)
         return self._elementwise_op(other, 'sub', lambda x, y: x - y)
     
     def mul(self, other: Union['NdArray', float, int]) -> 'NdArray':
-        """逐元素乘法。"""
+        """逐元素乘法。
+
+        Args:
+            other: 要相乘的张量或标量
+
+        Returns:
+            运算结果张量
+        """
         if isinstance(other, (int, float)):
             result_data = [x * other for x in self.data]
             return NdArray(result_data, self.shape, self.dtype)
@@ -300,7 +318,11 @@ class NdArray:
         return self._elementwise_op(other, 'div', safe_div)
     
     def neg(self) -> 'NdArray':
-        """取负。"""
+        """逐元素取负。
+
+        Returns:
+            取负后的张量
+        """
         result_data = [-x for x in self.data]
         return NdArray(result_data, self.shape, self.dtype)
     
@@ -362,22 +384,41 @@ class NdArray:
                     result_data[j * m + i] = self.data[i * n + j]
             return NdArray(result_data, new_shape, self.dtype)
         
-        # 通用情况：使用索引映射
+        # 通用情况：使用 stride-based 直接计算，避免逐元素 _linear_to_indices
+        if axes is None:
+            perm = tuple(range(self.shape.ndim - 1, -1, -1))
+        else:
+            perm = axes
+
+        old_strides = self.shape.strides
+        new_strides = new_shape.strides
+        ndim = self.shape.ndim
+
+        # 预计算：对于新形状中的每个维度 j，其对应的旧 stride
+        # new_linear_idx 中维度 j 的步长为 new_strides[j]
+        # 对应旧数据中维度 perm[j] 的步长为 old_strides[perm[j]]
+        mapped_old_strides = tuple(old_strides[perm[j]] for j in range(ndim))
+
         result_data = [0.0] * self.shape.size
-        for i in range(self.shape.size):
-            # 将线性索引转换为多维索引
-            old_indices = self._linear_to_indices(i, self.shape)
-            
-            # 应用排列
-            if axes is None:
-                new_indices = tuple(reversed(old_indices))
-            else:
-                new_indices = tuple(old_indices[axes[j]] for j in range(len(axes)))
-            
-            # 转换回新形状中的线性索引
-            new_idx = new_shape.linear_index(new_indices)
-            result_data[new_idx] = self.data[i]
-        
+        new_dims = new_shape.dims
+        data = self.data
+
+        # 使用迭代计数器遍历新形状的所有索引，直接计算旧线性索引
+        indices = [0] * ndim
+        for i in range(new_shape.size):
+            # 计算旧线性索引
+            old_idx = 0
+            for j in range(ndim):
+                old_idx += indices[j] * mapped_old_strides[j]
+            result_data[i] = data[old_idx]
+
+            # 递增多维索引（从最后一维开始进位）
+            for j in range(ndim - 1, -1, -1):
+                indices[j] += 1
+                if indices[j] < new_dims[j]:
+                    break
+                indices[j] = 0
+
         return NdArray(result_data, new_shape, self.dtype)
     
     @staticmethod
@@ -443,9 +484,10 @@ class NdArray:
             new_dims = [1]
         new_shape = Shape(tuple(new_dims))
         
-        # 执行缩减
+        # 执行缩减（根据 dtype 选择正确的初始值）
         result_size = new_shape.size
-        result_data = [0.0] * result_size
+        zero_val = 0 if self.dtype == 'int32' else 0.0
+        result_data = [zero_val] * result_size
         
         for i in range(self.shape.size):
             old_indices = self._linear_to_indices(i, self.shape)
@@ -502,7 +544,8 @@ class NdArray:
             new_dims = [1]
         new_shape = Shape(tuple(new_dims))
         
-        result_data = [float('-inf')] * new_shape.size
+        neg_inf = float('-inf')
+        result_data = [neg_inf] * new_shape.size
         for i in range(self.shape.size):
             old_indices = self._linear_to_indices(i, self.shape)
             new_indices = list(old_indices)
@@ -548,7 +591,8 @@ class NdArray:
             new_dims = [1]
         new_shape = Shape(tuple(new_dims))
         
-        result_data = [float('inf')] * new_shape.size
+        pos_inf = float('inf')
+        result_data = [pos_inf] * new_shape.size
         for i in range(self.shape.size):
             old_indices = self._linear_to_indices(i, self.shape)
             new_indices = list(old_indices)
@@ -568,35 +612,51 @@ class NdArray:
         """逐元素指数运算。"""
         result_data = []
         for x in self.data:
-            # 避免 math.exp 在极值上直接抛出 OverflowError。
-            if x > 709.0:
+            if x > _EXP_OVERFLOW_THRESHOLD:
                 result_data.append(float('inf'))
-            elif x < -745.0:
+            elif x < _EXP_UNDERFLOW_THRESHOLD:
                 result_data.append(0.0)
             else:
                 result_data.append(math.exp(x))
         return NdArray(result_data, self.shape, self.dtype)
     
     def log(self) -> 'NdArray':
-        """逐元素自然对数。"""
+        """逐元素自然对数。
+
+        对非正数输入返回 nan（x <= 0）或 -inf（x == 0），与 NumPy 行为一致。
+        """
         result_data = []
         for x in self.data:
-            if x <= 0:
-                raise ValueError("log requires positive values")
-            result_data.append(math.log(x))
+            if x > 0:
+                result_data.append(math.log(x))
+            elif x == 0:
+                result_data.append(float('-inf'))
+            else:
+                result_data.append(float('nan'))
         return NdArray(result_data, self.shape, self.dtype)
-    
+
     def sqrt(self) -> 'NdArray':
-        """逐元素平方根。"""
+        """逐元素平方根。
+
+        对负数输入返回 nan，与 NumPy 行为一致。
+        """
         result_data = []
         for x in self.data:
-            if x < 0:
-                raise ValueError("sqrt requires non-negative values")
-            result_data.append(math.sqrt(x))
+            if x >= 0:
+                result_data.append(math.sqrt(x))
+            else:
+                result_data.append(float('nan'))
         return NdArray(result_data, self.shape, self.dtype)
     
     def pow(self, exponent: float) -> 'NdArray':
-        """逐元素幂运算。"""
+        """逐元素幂运算。
+
+        Args:
+            exponent: 指数
+
+        Returns:
+            幂运算结果张量
+        """
         result_data = [x ** exponent for x in self.data]
         return NdArray(result_data, self.shape, self.dtype)
     
@@ -608,16 +668,24 @@ class NdArray:
         return NdArray(result_data, self.shape, self.dtype)
     
     def sigmoid(self) -> 'NdArray':
-        """Sigmoid 激活函数。"""
-        # 使用分段形式提升数值稳定性，避免 exp(-x) / exp(x) 溢出。
+        """Sigmoid 激活函数。
+
+        使用分段形式并对极端值钳位，避免 math.exp 溢出。
+        """
         result_data = []
         for x in self.data:
             if x >= 0:
-                z = math.exp(-x)
-                result_data.append(1.0 / (1.0 + z))
+                if x > _EXP_OVERFLOW_THRESHOLD:
+                    result_data.append(1.0)
+                else:
+                    z = math.exp(-x)
+                    result_data.append(1.0 / (1.0 + z))
             else:
-                z = math.exp(x)
-                result_data.append(z / (1.0 + z))
+                if x < _EXP_UNDERFLOW_THRESHOLD:
+                    result_data.append(0.0)
+                else:
+                    z = math.exp(x)
+                    result_data.append(z / (1.0 + z))
         return NdArray(result_data, self.shape, self.dtype)
     
     def tanh(self) -> 'NdArray':
@@ -638,29 +706,38 @@ class NdArray:
         """
         if self.shape == target_shape:
             return NdArray(self.data.copy(), self.shape, self.dtype)
-        
-        # 在左侧填充维度
+
+        # 在左侧填充维度为 1，对齐到目标 ndim
         ndim_diff = target_shape.ndim - self.shape.ndim
         source_dims = (1,) * ndim_diff + self.shape.dims
-        
-        # 预计算源 strides，避免在循环内反复创建 Shape 对象
-        src_strides = self.shape.strides
-        
+        src_strides_padded = (0,) * ndim_diff + self.shape.strides
+
+        # 预计算：对于广播维度（source_dim == 1），stride 设为 0
+        effective_strides = tuple(
+            0 if source_dims[j] == 1 else src_strides_padded[j]
+            for j in range(target_shape.ndim)
+        )
+
+        target_dims = target_shape.dims
+        ndim = target_shape.ndim
+        data = self.data
         result_data = [0.0] * target_shape.size
-        
+
+        # 使用迭代计数器遍历目标形状，直接计算源线性索引
+        indices = [0] * ndim
         for i in range(target_shape.size):
-            target_indices = self._linear_to_indices(i, target_shape)
-            
-            # 直接映射到原始数据索引，跳过中间 Shape 创建
-            src_linear_idx = 0
-            for j in range(self.shape.ndim):
-                src_dim = source_dims[ndim_diff + j]
-                tgt_idx = target_indices[ndim_diff + j]
-                if src_dim != 1:
-                    src_linear_idx += tgt_idx * src_strides[j]
-            
-            result_data[i] = self.data[src_linear_idx]
-        
+            src_idx = 0
+            for j in range(ndim):
+                src_idx += indices[j] * effective_strides[j]
+            result_data[i] = data[src_idx]
+
+            # 递增多维索引
+            for j in range(ndim - 1, -1, -1):
+                indices[j] += 1
+                if indices[j] < target_dims[j]:
+                    break
+                indices[j] = 0
+
         return NdArray(result_data, target_shape, self.dtype)
     
     # ==================== 工具方法 ====================
@@ -723,3 +800,24 @@ class NdArray:
     def __matmul__(self, other):
         """矩阵乘法运算符。"""
         return self.matmul(other)
+
+    # ==================== 反向运算符 ====================
+
+    def __radd__(self, other):
+        """反向加法运算符，支持 scalar + NdArray。"""
+        return self.add(other)
+
+    def __rsub__(self, other):
+        """反向减法运算符，支持 scalar - NdArray。"""
+        return self.neg().add(other)
+
+    def __rmul__(self, other):
+        """反向乘法运算符，支持 scalar * NdArray。"""
+        return self.mul(other)
+
+    def __rtruediv__(self, other):
+        """反向除法运算符，支持 scalar / NdArray。"""
+        if isinstance(other, (int, float)):
+            result_data = [other / x if x != 0 else float('inf') if other > 0 else float('-inf') if other < 0 else float('nan') for x in self.data]
+            return NdArray(result_data, self.shape, self.dtype)
+        return NotImplemented

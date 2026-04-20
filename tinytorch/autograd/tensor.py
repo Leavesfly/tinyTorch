@@ -136,17 +136,25 @@ class Tensor:
             self.unchain_backward()
     
     def unchain_backward(self):
-        """释放计算图以释放内存。"""
+        """释放计算图以释放内存。
+
+        使用 visited 集合跟踪已访问的 Tensor 和 Function，
+        确保多个输出指向同一 creator 时不会遗漏或重复清理。
+        """
         stack = [self]
-        visited = set()
+        visited_tensors = set()
+        visited_functions = set()
         while stack:
             var = stack.pop()
-            if var in visited:
+            if id(var) in visited_tensors:
                 continue
-            visited.add(var)
+            visited_tensors.add(id(var))
             if var.creator is not None:
-                var.creator.clear_saved_tensors()
-                stack.extend(var.creator.inputs)
+                func_id = id(var.creator)
+                if func_id not in visited_functions:
+                    visited_functions.add(func_id)
+                    var.creator.clear_saved_tensors()
+                    stack.extend(var.creator.inputs)
                 var.creator = None
     
     def clear_grad(self):
@@ -171,6 +179,8 @@ class Tensor:
         """
         if isinstance(value, Tensor):
             return value
+        if isinstance(value, NdArray):
+            return Tensor(value, requires_grad=False)
         if isinstance(value, (int, float)):
             return Tensor(NdArray([value]), requires_grad=False)
         raise TypeError(f"Cannot convert {type(value)} to Tensor")

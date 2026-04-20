@@ -134,8 +134,11 @@ class Shape:
             >>> s1.can_broadcast(s3)
             False
         """
-        # 从右到左比较
-        for d1, d2 in zip(reversed(self._dims), reversed(other._dims)):
+        # 先将两个形状左侧补 1 对齐，再从右到左逐维比较
+        max_ndim = max(self._ndim, other._ndim)
+        dims1 = (1,) * (max_ndim - self._ndim) + self._dims
+        dims2 = (1,) * (max_ndim - other._ndim) + other._dims
+        for d1, d2 in zip(dims1, dims2):
             if d1 != d2 and d1 != 1 and d2 != 1:
                 return False
         return True

@@ -13,7 +13,53 @@ from tinytorch.ndarr import NdArray
 from tinytorch.nn import init
 
 
-class RNN(Module):
+class RNNBase(Module):
+    """RNN 系列层的公共基类，提取共享的辅助方法。"""
+
+    @staticmethod
+    def _linear(x: Tensor, weight: Parameter, transpose: bool = False) -> Tensor:
+        """线性变换：x @ weight 或 x @ weight.T"""
+        w = weight.transpose() if transpose else weight
+        return x.matmul(w)
+
+    @staticmethod
+    def _add_variables(a: Tensor, b: Tensor) -> Tensor:
+        """Tensor 相加。"""
+        return a + b
+
+    @staticmethod
+    def _add_bias(x: Tensor, bias: Parameter) -> Tensor:
+        """添加偏置（广播）。"""
+        return x + bias
+
+    @staticmethod
+    def _apply_sigmoid(x: Tensor) -> Tensor:
+        """Sigmoid 激活。"""
+        return x.sigmoid()
+
+    @staticmethod
+    def _apply_tanh(x: Tensor) -> Tensor:
+        """Tanh 激活。"""
+        return x.tanh()
+
+    @staticmethod
+    def _mul_variables(a: Tensor, b: Tensor) -> Tensor:
+        """逐元素相乘。"""
+        return a * b
+
+    def _gate(self, x_t: Tensor, h_prev: Tensor, W_i: Parameter,
+              W_h: Parameter, bias: Parameter, activation: str) -> Tensor:
+        """计算门控值：activation(W_i @ x_t + W_h @ h_prev + bias)"""
+        result = self._linear(x_t, W_i, transpose=True)
+        result = self._add_variables(result, self._linear(h_prev, W_h, transpose=True))
+        if bias is not None:
+            result = self._add_bias(result, bias)
+        if activation == 'sigmoid':
+            return self._apply_sigmoid(result)
+        return self._apply_tanh(result)
+
+
+class RNN(RNNBase):
     """基础循环神经网络层。
     
     实现标准的 RNN 单元：h_t = tanh(W_ih @ x_t + W_hh @ h_{t-1} + b)
@@ -114,10 +160,10 @@ class RNN(Module):
             当前时间步隐藏状态，形状 (batch_size, hidden_size)
         """
         # W_ih @ x_t
-        ih_out = self._matmul(x_t, self.W_ih, transpose_weight=True)
+        ih_out = self._linear(x_t, self.W_ih, transpose=True)
         
         # W_hh @ h_prev
-        hh_out = self._matmul(h_prev, self.W_hh, transpose_weight=True)
+        hh_out = self._linear(h_prev, self.W_hh, transpose=True)
         
         # 相加
         h_t = self._add_variables(ih_out, hh_out)
@@ -131,30 +177,13 @@ class RNN(Module):
         
         return h_t
     
-    def _matmul(self, x: Tensor, weight: Parameter, transpose_weight: bool = False) -> Tensor:
-        """矩阵乘法辅助函数。"""
-        w_t = weight.transpose() if transpose_weight else weight
-        return x.matmul(w_t)
-    
-    def _add_variables(self, a: Tensor, b: Tensor) -> Tensor:
-        """Tensor 相加。"""
-        return a + b
-    
-    def _add_bias(self, x: Tensor, bias: Parameter) -> Tensor:
-        """添加偏置（广播）。"""
-        return x + bias
-    
-    def _apply_tanh(self, x: Tensor) -> Tensor:
-        """应用 tanh 激活函数。"""
-        return x.tanh()
-    
     def __repr__(self) -> str:
         """返回层的字符串表示。"""
         return (f"RNN(input_size={self.input_size}, hidden_size={self.hidden_size}, "
                 f"use_bias={self.use_bias})")
 
 
-class LSTM(Module):
+class LSTM(RNNBase):
     """长短期记忆网络层。
     
     实现 LSTM 单元，包含输入门、遗忘门、输出门和单元状态。
@@ -277,69 +306,23 @@ class LSTM(Module):
         
         return h_t, c_t
     
-    def _gate(self, x_t: Tensor, h_prev: Tensor, W_i: Parameter,
-              W_h: Parameter, bias: Parameter, activation: str) -> Tensor:
-        """计算门控值。"""
-        # W_i @ x_t + W_h @ h_prev + bias
-        result = self._linear(x_t, W_i, transpose=True)
-        result = self._add_variables(result, self._linear(h_prev, W_h, transpose=True))
-        
-        if bias is not None:
-            result = self._add_bias(result, bias)
-        
-        if activation == 'sigmoid':
-            return self._apply_sigmoid(result)
-        elif activation == 'tanh':
-            return self._apply_tanh(result)
-        else:
-            return result
-    
-    def _linear(self, x: Tensor, weight: Parameter, transpose: bool = False) -> Tensor:
-        """线性变换。"""
-        w = weight.transpose() if transpose else weight
-        return x.matmul(w)
-    
-    def _add_variables(self, a: Tensor, b: Tensor) -> Tensor:
-        """Tensor 相加。"""
-        return a + b
-    
-    def _add_bias(self, x: Tensor, bias: Parameter) -> Tensor:
-        """添加偏置。"""
-        return x + bias
-    
-    def _apply_sigmoid(self, x: Tensor) -> Tensor:
-        """Sigmoid 激活。"""
-        return x.sigmoid()
-    
-    def _apply_tanh(self, x: Tensor) -> Tensor:
-        """Tanh 激活。"""
-        return x.tanh()
-
     def _update_cell(self, f_t: Tensor, c_prev: Tensor,
                      i_t: Tensor, g_t: Tensor) -> Tensor:
         """更新单元状态：c_t = f_t * c_prev + i_t * g_t"""
-        fc = self._mul_variables(f_t, c_prev)
-        ig = self._mul_variables(i_t, g_t)
-        c_t = self._add_variables(fc, ig)
-        return c_t
-    
+        return self._add_variables(self._mul_variables(f_t, c_prev),
+                                   self._mul_variables(i_t, g_t))
+
     def _update_hidden(self, o_t: Tensor, c_t: Tensor) -> Tensor:
         """更新隐藏状态：h_t = o_t * tanh(c_t)"""
-        tanh_c = self._apply_tanh(c_t)
-        h_t = self._mul_variables(o_t, tanh_c)
-        return h_t
-    
-    def _mul_variables(self, a: Tensor, b: Tensor) -> Tensor:
-        """逐元素相乘。"""
-        return a * b
-    
+        return self._mul_variables(o_t, self._apply_tanh(c_t))
+
     def __repr__(self) -> str:
         """返回层的字符串表示。"""
         return (f"LSTM(input_size={self.input_size}, hidden_size={self.hidden_size}, "
                 f"use_bias={self.use_bias})")
 
 
-class GRU(Module):
+class GRU(RNNBase):
     """门控循环单元层。
     
     实现 GRU 单元，包含重置门和更新门。
@@ -443,43 +426,6 @@ class GRU(Module):
         h_t = self._gru_update(z_t, n_t, h_prev)
         
         return h_t
-    
-    def _gate(self, x_t: Tensor, h_prev: Tensor, W_i: Parameter,
-              W_h: Parameter, bias: Parameter, activation: str) -> Tensor:
-        """计算门控值。"""
-        result = self._linear(x_t, W_i, True)
-        result = self._add_variables(result, self._linear(h_prev, W_h, True))
-        if bias is not None:
-            result = self._add_bias(result, bias)
-        if activation == 'sigmoid':
-            return self._apply_sigmoid(result)
-        else:
-            return self._apply_tanh(result)
-    
-    def _linear(self, x: Tensor, weight: Parameter, transpose: bool) -> Tensor:
-        """线性变换。"""
-        w = weight.transpose() if transpose else weight
-        return x.matmul(w)
-    
-    def _add_variables(self, a: Tensor, b: Tensor) -> Tensor:
-        """变量相加。"""
-        return a + b
-    
-    def _add_bias(self, x: Tensor, bias: Parameter) -> Tensor:
-        """添加偏置。"""
-        return x + bias
-    
-    def _apply_sigmoid(self, x: Tensor) -> Tensor:
-        """Sigmoid 激活。"""
-        return x.sigmoid()
-    
-    def _apply_tanh(self, x: Tensor) -> Tensor:
-        """Tanh 激活。"""
-        return x.tanh()
-
-    def _mul_variables(self, a: Tensor, b: Tensor) -> Tensor:
-        """逐元素相乘。"""
-        return a * b
     
     def _gru_update(self, z_t: Tensor, n_t: Tensor, h_prev: Tensor) -> Tensor:
         """GRU 状态更新。"""

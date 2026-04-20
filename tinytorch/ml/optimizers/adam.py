@@ -75,44 +75,49 @@ class Adam(Optimizer):
             self.v[param_id] = [0.0] * len(param.value.data)
     
     def step(self):
-        """执行一步参数更新。"""
+        """执行一步参数更新。
+
+        对一阶矩/二阶矩的更新仍使用列表操作（需要原地修改状态），
+        但最终参数更新使用 NdArray 向量化运算。
+        """
         self.t += 1
-        
+
         for param in self.params:
             if param.grad is None:
                 continue
-            
+
             param_id = id(param)
-            # 复制梯度数据，避免 weight_decay 污染原始梯度
-            grad_data = list(param.grad.data)
-            
-            # 权重衰减（L2 正则化添加到梯度副本上）
+            grad_data = param.grad.data
+
+            # 权重衰减（L2 正则化）
             if self.weight_decay != 0:
-                for i in range(len(grad_data)):
-                    grad_data[i] += self.weight_decay * param.value.data[i]
-            
+                param_data = param.value.data
+                grad_data = [
+                    grad_data[i] + self.weight_decay * param_data[i]
+                    for i in range(len(grad_data))
+                ]
+
             # 更新一阶矩和二阶矩
-            for i in range(len(param.value.data)):
-                # 更新一阶矩：m_t = beta1 * m_{t-1} + (1 - beta1) * grad
-                self.m[param_id][i] = self.beta1 * self.m[param_id][i] + (1 - self.beta1) * grad_data[i]
-                
-                # 更新二阶矩：v_t = beta2 * v_{t-1} + (1 - beta2) * grad^2
-                self.v[param_id][i] = self.beta2 * self.v[param_id][i] + (1 - self.beta2) * grad_data[i] ** 2
-            
+            m_list = self.m[param_id]
+            v_list = self.v[param_id]
+            one_minus_beta1 = 1 - self.beta1
+            one_minus_beta2 = 1 - self.beta2
+            for i in range(len(grad_data)):
+                m_list[i] = self.beta1 * m_list[i] + one_minus_beta1 * grad_data[i]
+                v_list[i] = self.beta2 * v_list[i] + one_minus_beta2 * grad_data[i] * grad_data[i]
+
             # 偏差修正
             bias_correction1 = 1 - self.beta1 ** self.t
             bias_correction2 = 1 - self.beta2 ** self.t
-            
-            # 更新参数
-            for i in range(len(param.value.data)):
-                # 偏差修正后的一阶矩：m_hat = m_t / (1 - beta1^t)
-                m_hat = self.m[param_id][i] / bias_correction1
-                
-                # 偏差修正后的二阶矩：v_hat = v_t / (1 - beta2^t)
-                v_hat = self.v[param_id][i] / bias_correction2
-                
-                # 参数更新：param = param - lr * m_hat / (sqrt(v_hat) + eps)
-                param.value.data[i] -= self.learning_rate * m_hat / (math.sqrt(v_hat) + self.epsilon)
+
+            # 向量化参数更新
+            lr_scaled = self.learning_rate / bias_correction1
+            bc2_inv = 1.0 / bias_correction2
+            eps = self.epsilon
+            param.value.data = [
+                param.value.data[i] - lr_scaled * m_list[i] / (math.sqrt(v_list[i] * bc2_inv) + eps)
+                for i in range(len(param.value.data))
+            ]
     
     def __repr__(self) -> str:
         """返回优化器的字符串表示。"""

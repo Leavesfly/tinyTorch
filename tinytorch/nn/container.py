@@ -71,10 +71,14 @@ class Sequential(Module):
         if not isinstance(module, Module):
             raise TypeError(f"module must be an instance of Module, got {type(module)}")
         
-        # 生成模块名称
+        # 生成模块名称（检查冲突避免覆盖已有子模块）
         if name is None:
-            name = f'layer_{len(self._layers)}'
-        
+            idx = len(self._layers)
+            name = f'layer_{idx}'
+            while name in self._child_modules:
+                idx += 1
+                name = f'layer_{idx}'
+
         # 添加到层列表
         self._layers.append(module)
         

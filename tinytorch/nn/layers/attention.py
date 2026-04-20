@@ -44,7 +44,7 @@ class MultiHeadAttention(Module):
         Args:
             embed_dim: 嵌入维度
             num_heads: 注意力头数
-            dropout: Dropout 概率（暂不实现）
+            dropout: Dropout 概率（当前版本未实现，参数仅作接口预留）
         """
         super().__init__()
         

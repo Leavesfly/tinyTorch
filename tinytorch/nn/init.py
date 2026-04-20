@@ -65,8 +65,8 @@ def uniform_(tensor: NdArray, a: float = 0.0, b: float = 1.0) -> NdArray:
     Returns:
         初始化后的张量（同一个对象）
     """
-    size = tensor.shape.size
-    tensor.data = [tt_random.uniform(a, b) for _ in range(size)]
+    initialized = NdArray.uniform(a, b, tensor.shape.dims, dtype=tensor.dtype)
+    tensor.data = initialized.data
     return tensor
 
 
@@ -81,8 +81,11 @@ def normal_(tensor: NdArray, mean: float = 0.0, std: float = 1.0) -> NdArray:
     Returns:
         初始化后的张量（同一个对象）
     """
-    size = tensor.shape.size
-    tensor.data = [tt_random.gauss(mean, std) for _ in range(size)]
+    initialized = NdArray.randn(tensor.shape.dims, dtype=tensor.dtype)
+    if mean != 0.0 or std != 1.0:
+        tensor.data = [mean + std * x for x in initialized.data]
+    else:
+        tensor.data = initialized.data
     return tensor
 
 

@@ -131,12 +131,11 @@ class Trainer:
         # 设置为训练模式
         self.model.train()
         
-        # 获取所有批次
-        batches = self.dataset.get_batches()
+        # 使用惰性迭代避免一次性加载所有批次到内存
         total_loss = 0.0
-        num_batches = len(batches)
-        
-        for batch_idx, (batch_data, batch_labels) in enumerate(batches):
+        num_batches = (len(self.dataset) + self.dataset.batch_size - 1) // self.dataset.batch_size
+
+        for batch_idx, (batch_data, batch_labels) in enumerate(self.dataset.iter_batches()):
             # 转换为 Tensor
             input_var = Tensor(batch_data, requires_grad=False)
             target_var = Tensor(batch_labels, requires_grad=False)

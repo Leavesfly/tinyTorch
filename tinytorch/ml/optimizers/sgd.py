@@ -58,39 +58,44 @@ class SGD(Optimizer):
                 self.state[i] = {'velocity': None}
     
     def step(self) -> None:
-        """执行一步参数更新。"""
+        """执行一步参数更新。
+
+        使用 NdArray 向量化运算代替逐元素 Python 循环，显著提升性能。
+        """
+        from tinytorch.ndarr.ndarray import NdArray
+
         for i, param in enumerate(self.params):
             if param.grad is None:
                 continue
-            
-            # 复制梯度数据，避免 weight_decay 污染原始梯度
-            grad_data = list(param.grad.data)
-            
+
+            grad = param.grad
+
+            # 确保梯度形状与参数一致（外部可能设置了展平的梯度）
+            if grad.shape.dims != param.value.shape.dims:
+                grad = grad.reshape(param.value.shape.dims)
+
             # 添加权重衰减（L2 正则化）
             if self.weight_decay > 0:
-                for j in range(len(grad_data)):
-                    grad_data[j] += self.weight_decay * param.value.data[j]
-            
+                grad = grad.add(param.value.mul(self.weight_decay))
+
             # 使用动量
             if self.momentum > 0:
                 if self.state[i]['velocity'] is None:
-                    # 初始化速度为零
-                    from tinytorch.ndarr.ndarray import NdArray
                     self.state[i]['velocity'] = NdArray.zeros(param.value.shape.dims)
-                
+
                 velocity = self.state[i]['velocity']
-                
-                # 更新速度：velocity = momentum * velocity + grad
-                for j in range(len(velocity.data)):
-                    velocity.data[j] = self.momentum * velocity.data[j] + grad_data[j]
-                
-                # 更新参数：param = param - learning_rate * velocity
-                for j in range(len(param.value.data)):
-                    param.value.data[j] -= self.learning_rate * velocity.data[j]
+                # velocity = momentum * velocity + grad
+                new_velocity_data = [
+                    self.momentum * velocity.data[j] + grad.data[j]
+                    for j in range(len(velocity.data))
+                ]
+                velocity.data = new_velocity_data
+
+                # param = param - learning_rate * velocity
+                param.value = param.value.sub(velocity.mul(self.learning_rate))
             else:
                 # 普通 SGD: param = param - learning_rate * grad
-                for j in range(len(param.value.data)):
-                    param.value.data[j] -= self.learning_rate * grad_data[j]
+                param.value = param.value.sub(grad.mul(self.learning_rate))
     
     def __repr__(self) -> str:
         """返回优化器的字符串表示。"""

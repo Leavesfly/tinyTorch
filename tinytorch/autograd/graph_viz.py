@@ -216,7 +216,7 @@ def visualize_graph(output_tensor, port: int = 8098, auto_open: bool = True,
         def log_message(self, format, *args):
             pass
 
-    server = HTTPServer(('0.0.0.0', port), GraphHandler)
+    server = HTTPServer(('127.0.0.1', port), GraphHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
 

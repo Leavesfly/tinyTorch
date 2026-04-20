@@ -160,15 +160,10 @@ class Dropout(Module):
         if self.p == 0:
             return input
         
-        # 生成 dropout mask
-        mask_data = []
-        for _ in range(len(input.value.data)):
-            if tt_random.random() < self.p:
-                mask_data.append(0.0)
-            else:
-                # 缩放以保持期望值不变
-                mask_data.append(1.0 / (1.0 - self.p))
-        
+        # 批量生成随机数构建 dropout mask
+        scale = 1.0 / (1.0 - self.p)
+        rand_arr = NdArray.uniform(0.0, 1.0, input.value.shape.dims, dtype=input.value.dtype)
+        mask_data = [scale if r >= self.p else 0.0 for r in rand_arr.data]
         mask = NdArray(mask_data, input.value.shape, input.value.dtype)
         mask_var = Tensor(mask, requires_grad=False)
         
