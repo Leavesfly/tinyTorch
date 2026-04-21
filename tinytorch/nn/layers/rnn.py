@@ -14,64 +14,143 @@ from tinytorch.nn import init
 
 
 class RNNBase(Module):
-    """RNN 系列层的公共基类，提取共享的辅助方法。"""
+    """RNN 系列层的公共基类。
 
-    @staticmethod
-    def _linear(x: Tensor, weight: Parameter, transpose: bool = False) -> Tensor:
-        """线性变换：x @ weight 或 x @ weight.T"""
-        w = weight.transpose() if transpose else weight
-        return x.matmul(w)
+    提供门控权重创建、门控计算和通用的时间步循环逻辑。
+    子类只需实现 ``_cell_forward`` 即可定义具体的循环单元行为，
+    可选覆写 ``_init_states`` / ``_extract_hidden`` / ``_pack_output``
+    来定制状态初始化和输出格式。
+    """
 
-    @staticmethod
-    def _add_variables(a: Tensor, b: Tensor) -> Tensor:
-        """Tensor 相加。"""
-        return a + b
+    def __init__(self, input_size: int, hidden_size: int,
+                 use_bias: bool = True) -> None:
+        """初始化 RNN 基类的公共属性。
 
-    @staticmethod
-    def _add_bias(x: Tensor, bias: Parameter) -> Tensor:
-        """添加偏置（广播）。"""
-        return x + bias
+        参数:
+            input_size: 输入特征维度。
+            hidden_size: 隐藏状态维度。
+            use_bias: 是否使用偏置。
+        """
+        super().__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.use_bias = use_bias
 
-    @staticmethod
-    def _apply_sigmoid(x: Tensor) -> Tensor:
-        """Sigmoid 激活。"""
-        return x.sigmoid()
+    # ------------------------------------------------------------------
+    # 权重创建与门控计算
+    # ------------------------------------------------------------------
 
-    @staticmethod
-    def _apply_tanh(x: Tensor) -> Tensor:
-        """Tanh 激活。"""
-        return x.tanh()
+    def _create_gate_weights(self, gate_name: str, input_size: int,
+                             hidden_size: int, bound: float,
+                             create_bias: bool) -> None:
+        """为一个门创建输入权重、隐藏权重和可选偏置。
 
-    @staticmethod
-    def _mul_variables(a: Tensor, b: Tensor) -> Tensor:
-        """逐元素相乘。"""
-        return a * b
+        创建的参数会以 ``W_i{gate_name}``、``W_h{gate_name}``、
+        ``b_{gate_name}`` 的命名注册到模块上。
+
+        参数:
+            gate_name: 门的后缀标识（如 'i', 'f', 'r'）
+            input_size: 输入特征维度
+            hidden_size: 隐藏状态维度
+            bound: 均匀分布初始化的范围 [-bound, bound]
+            create_bias: 是否创建偏置参数
+        """
+        setattr(self, f'W_i{gate_name}',
+                Parameter(init.uniform(-bound, bound, (hidden_size, input_size)),
+                          name=f'W_i{gate_name}'))
+        setattr(self, f'W_h{gate_name}',
+                Parameter(init.uniform(-bound, bound, (hidden_size, hidden_size)),
+                          name=f'W_h{gate_name}'))
+        if create_bias:
+            setattr(self, f'b_{gate_name}',
+                    Parameter(init.uniform(-bound, bound, (hidden_size,)),
+                              name=f'b_{gate_name}'))
+        else:
+            setattr(self, f'b_{gate_name}', None)
 
     def _gate(self, x_t: Tensor, h_prev: Tensor, W_i: Parameter,
-              W_h: Parameter, bias: Parameter, activation: str) -> Tensor:
-        """计算门控值：activation(W_i @ x_t + W_h @ h_prev + bias)"""
-        result = self._linear(x_t, W_i, transpose=True)
-        result = self._add_variables(result, self._linear(h_prev, W_h, transpose=True))
+              W_h: Parameter, bias: 'Parameter | None',
+              activation: str) -> Tensor:
+        """计算门控值：activation(x_t @ W_i.T + h_prev @ W_h.T + bias)"""
+        result = x_t.matmul(W_i.transpose()) + h_prev.matmul(W_h.transpose())
         if bias is not None:
-            result = self._add_bias(result, bias)
+            result = result + bias
         if activation == 'sigmoid':
-            return self._apply_sigmoid(result)
-        return self._apply_tanh(result)
+            return result.sigmoid()
+        return result.tanh()
+
+    # ------------------------------------------------------------------
+    # 通用前向传播（模板方法模式）
+    # ------------------------------------------------------------------
+
+    def _validate_input(self, input: Tensor) -> 'tuple[int, int, int]':
+        """校验输入形状并返回 (batch_size, seq_len, input_size)。"""
+        batch_size, seq_len, input_size = input.value.shape.dims
+        if input_size != self.input_size:
+            raise ValueError(
+                f"Expected input_size={self.input_size}, got {input_size}"
+            )
+        return batch_size, seq_len, input_size
+
+    def _init_hidden(self, batch_size: int) -> Tensor:
+        """创建全零的隐藏状态张量。"""
+        return Tensor(
+            NdArray.zeros((batch_size, self.hidden_size)),
+            requires_grad=False,
+        )
+
+    def forward(self, input: Tensor, initial_states=None):
+        """通用的 RNN 前向传播：校验 → 初始化 → 时间步循环 → 组装输出。
+
+        子类通过覆写钩子方法来定制行为：
+        - ``_init_states``: 初始化循环状态
+        - ``_cell_forward``: 单个时间步的计算
+        - ``_extract_hidden``: 从状态中提取 h_t 用于输出收集
+        - ``_pack_output``: 组装最终返回值
+
+        参数:
+            input: 输入序列，形状 (batch_size, seq_len, input_size)。
+            initial_states: 初始隐藏状态，格式由子类决定。
+
+        返回:
+            由 ``_pack_output`` 决定的输出格式。
+        """
+        batch_size, seq_len, input_size = self._validate_input(input)
+        states = self._init_states(batch_size, initial_states)
+
+        hidden_outputs = []
+        for time_step in range(seq_len):
+            x_t = _TimeSlice(time_step, seq_len, input_size)(input)
+            states = self._cell_forward(x_t, states)
+            hidden_outputs.append(self._extract_hidden(states))
+
+        stacked_output = _StackTime(self.hidden_size)(*hidden_outputs)
+        return self._pack_output(stacked_output, states)
+
+    def _init_states(self, batch_size: int, initial_states):
+        """初始化循环状态。子类可覆写以支持多状态（如 LSTM 的 h, c）。"""
+        if initial_states is not None:
+            return initial_states
+        return self._init_hidden(batch_size)
+
+    def _cell_forward(self, x_t: Tensor, states):
+        """单个时间步的前向传播，子类必须实现。"""
+        raise NotImplementedError
+
+    def _extract_hidden(self, states) -> Tensor:
+        """从状态中提取隐藏状态 h_t，用于收集每个时间步的输出。"""
+        return states
+
+    def _pack_output(self, stacked_output: Tensor, final_states):
+        """组装最终输出，子类可覆写以返回额外状态（如 LSTM 的 cell state）。"""
+        return stacked_output
 
 
 class RNN(RNNBase):
     """基础循环神经网络层。
-    
+
     实现标准的 RNN 单元：h_t = tanh(W_ih @ x_t + W_hh @ h_{t-1} + b)
-    
-    Attributes:
-        input_size: 输入特征维度
-        hidden_size: 隐藏状态维度
-        use_bias: 是否使用偏置
-        W_ih: 输入到隐藏的权重
-        W_hh: 隐藏到隐藏的权重
-        bias: 偏置项
-    
+
     Example:
         >>> rnn = RNN(input_size=10, hidden_size=20)
         >>> x = Tensor(NdArray.randn((batch_size, seq_len, 10)))
@@ -79,128 +158,54 @@ class RNN(RNNBase):
         >>> print(h.value.shape)
         (batch_size, seq_len, 20)
     """
-    
-    def __init__(self, input_size: int, hidden_size: int, use_bias: bool = True):
-        """初始化 RNN 层。
-        
-        Args:
-            input_size: 输入特征维度
-            hidden_size: 隐藏状态维度
-            use_bias: 是否使用偏置
-        """
-        super().__init__()
-        
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.use_bias = use_bias
-        
-        # 初始化权重
-        k = 1.0 / math.sqrt(hidden_size)
+
+    def __init__(self, input_size: int, hidden_size: int,
+                 use_bias: bool = True) -> None:
+        super().__init__(input_size, hidden_size, use_bias)
+
+        bound = 1.0 / math.sqrt(hidden_size)
         self.W_ih = Parameter(
-            init.uniform(-k, k, (hidden_size, input_size)),
-            name='W_ih'
-        )
+            init.uniform(-bound, bound, (hidden_size, input_size)), name='W_ih')
         self.W_hh = Parameter(
-            init.uniform(-k, k, (hidden_size, hidden_size)),
-            name='W_hh'
+            init.uniform(-bound, bound, (hidden_size, hidden_size)), name='W_hh')
+        self.bias = (
+            Parameter(init.uniform(-bound, bound, (hidden_size,)), name='bias')
+            if use_bias else None
         )
-        
-        if use_bias:
-            self.bias = Parameter(
-                init.uniform(-k, k, (hidden_size,)),
-                name='bias'
-            )
-        else:
-            self.bias = None
-    
-    def forward(self, input: Tensor, h_0: Tensor = None) -> Tensor:
-        """前向传播。
-        
-        Args:
-            input: 输入序列，形状 (batch_size, seq_len, input_size)
-            h_0: 初始隐藏状态，形状 (batch_size, hidden_size)，默认为零
-        
-        Returns:
-            所有时间步的隐藏状态，形状 (batch_size, seq_len, hidden_size)
-        """
-        batch_size, seq_len, input_size = input.value.shape.dims
-        
-        if input_size != self.input_size:
-            raise ValueError(
-                f"Expected input_size={self.input_size}, got {input_size}"
-            )
-        
-        # 初始化隐藏状态
-        if h_0 is None:
-            h_t = Tensor(NdArray.zeros((batch_size, self.hidden_size)), requires_grad=False)
-        else:
-            h_t = h_0
-        
-        # 存储所有时间步的输出
-        outputs = []
-        
-        for t in range(seq_len):
-            # 提取当前时间步输入，同时保持对 input 的梯度连接
-            x_t = _TimeSlice(t, seq_len, input_size)(input)
-            
-            # 计算 h_t = tanh(W_ih @ x_t + W_hh @ h_{t-1} + b)
-            h_t = self._cell_forward(x_t, h_t)
-            outputs.append(h_t)
-        
-        return _StackTime(self.hidden_size)(*outputs)
-    
+
     def _cell_forward(self, x_t: Tensor, h_prev: Tensor) -> Tensor:
         """单个 RNN 单元的前向传播。
-        
-        Args:
-            x_t: 当前时间步输入，形状 (batch_size, input_size)
-            h_prev: 上一时间步隐藏状态，形状 (batch_size, hidden_size)
-        
-        Returns:
-            当前时间步隐藏状态，形状 (batch_size, hidden_size)
+
+        参数:
+            x_t: 当前时间步输入，形状 (batch_size, input_size)。
+            h_prev: 上一时间步隐藏状态，形状 (batch_size, hidden_size)。
+
+        返回:
+            当前时间步隐藏状态，形状 (batch_size, hidden_size)。
         """
-        # W_ih @ x_t
-        ih_out = self._linear(x_t, self.W_ih, transpose=True)
-        
-        # W_hh @ h_prev
-        hh_out = self._linear(h_prev, self.W_hh, transpose=True)
-        
-        # 相加
-        h_t = self._add_variables(ih_out, hh_out)
-        
-        # 加偏置
+        h_t = x_t.matmul(self.W_ih.transpose()) + h_prev.matmul(self.W_hh.transpose())
         if self.use_bias:
-            h_t = self._add_bias(h_t, self.bias)
-        
-        # tanh 激活
-        h_t = self._apply_tanh(h_t)
-        
-        return h_t
-    
+            h_t = h_t + self.bias
+        return h_t.tanh()
+
     def __repr__(self) -> str:
-        """返回层的字符串表示。"""
         return (f"RNN(input_size={self.input_size}, hidden_size={self.hidden_size}, "
                 f"use_bias={self.use_bias})")
 
 
 class LSTM(RNNBase):
     """长短期记忆网络层。
-    
+
     实现 LSTM 单元，包含输入门、遗忘门、输出门和单元状态。
-    
+
     公式：
-        i_t = sigmoid(W_ii @ x_t + W_hi @ h_{t-1} + b_i)  # 输入门
-        f_t = sigmoid(W_if @ x_t + W_hf @ h_{t-1} + b_f)  # 遗忘门
-        g_t = tanh(W_ig @ x_t + W_hg @ h_{t-1} + b_g)     # 候选单元状态
-        o_t = sigmoid(W_io @ x_t + W_ho @ h_{t-1} + b_o)  # 输出门
-        c_t = f_t * c_{t-1} + i_t * g_t                    # 单元状态
-        h_t = o_t * tanh(c_t)                               # 隐藏状态
-    
-    Attributes:
-        input_size: 输入特征维度
-        hidden_size: 隐藏状态维度
-        use_bias: 是否使用偏置
-    
+        i_t = sigmoid(W_ii @ x_t + W_hi @ h_{t-1} + b_i)
+        f_t = sigmoid(W_if @ x_t + W_hf @ h_{t-1} + b_f)
+        g_t = tanh(W_ig @ x_t + W_hg @ h_{t-1} + b_g)
+        o_t = sigmoid(W_io @ x_t + W_ho @ h_{t-1} + b_o)
+        c_t = f_t * c_{t-1} + i_t * g_t
+        h_t = o_t * tanh(c_t)
+
     Example:
         >>> lstm = LSTM(input_size=10, hidden_size=20)
         >>> x = Tensor(NdArray.randn((batch_size, seq_len, 10)))
@@ -208,136 +213,58 @@ class LSTM(RNNBase):
         >>> print(h.value.shape, c.value.shape)
         (batch_size, seq_len, 20) (batch_size, 20)
     """
-    
-    def __init__(self, input_size: int, hidden_size: int, use_bias: bool = True):
-        """初始化 LSTM 层。
-        
-        Args:
-            input_size: 输入特征维度
-            hidden_size: 隐藏状态维度
-            use_bias: 是否使用偏置
-        """
-        super().__init__()
-        
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.use_bias = use_bias
-        
-        k = 1.0 / math.sqrt(hidden_size)
-        
-        # 输入门
-        self.W_ii = Parameter(init.uniform(-k, k, (hidden_size, input_size)), name='W_ii')
-        self.W_hi = Parameter(init.uniform(-k, k, (hidden_size, hidden_size)), name='W_hi')
-        
-        # 遗忘门
-        self.W_if = Parameter(init.uniform(-k, k, (hidden_size, input_size)), name='W_if')
-        self.W_hf = Parameter(init.uniform(-k, k, (hidden_size, hidden_size)), name='W_hf')
-        
-        # 候选单元状态
-        self.W_ig = Parameter(init.uniform(-k, k, (hidden_size, input_size)), name='W_ig')
-        self.W_hg = Parameter(init.uniform(-k, k, (hidden_size, hidden_size)), name='W_hg')
-        
-        # 输出门
-        self.W_io = Parameter(init.uniform(-k, k, (hidden_size, input_size)), name='W_io')
-        self.W_ho = Parameter(init.uniform(-k, k, (hidden_size, hidden_size)), name='W_ho')
-        
-        if use_bias:
-            self.b_i = Parameter(init.uniform(-k, k, (hidden_size,)), name='b_i')
-            self.b_f = Parameter(init.uniform(-k, k, (hidden_size,)), name='b_f')
-            self.b_g = Parameter(init.uniform(-k, k, (hidden_size,)), name='b_g')
-            self.b_o = Parameter(init.uniform(-k, k, (hidden_size,)), name='b_o')
-        else:
-            self.b_i = self.b_f = self.b_g = self.b_o = None
-    
-    def forward(self, input: Tensor, states=None):
-        """前向传播。
-        
-        Args:
-            input: 输入序列，形状 (batch_size, seq_len, input_size)
-            states: 初始状态 (h_0, c_0)，默认为零
-        
-        Returns:
-            (所有时间步的隐藏状态, 最后的单元状态)
-        """
-        batch_size, seq_len, input_size = input.value.shape.dims
-        if input_size != self.input_size:
-            raise ValueError(
-                f"Expected input_size={self.input_size}, got {input_size}"
-            )
-        
-        # 初始化状态
-        if states is None:
-            h_t = Tensor(NdArray.zeros((batch_size, self.hidden_size)), requires_grad=False)
-            c_t = Tensor(NdArray.zeros((batch_size, self.hidden_size)), requires_grad=False)
-        else:
-            h_t, c_t = states
-        
-        outputs = []
-        
-        for t in range(seq_len):
-            # 提取当前时间步输入，同时保持对 input 的梯度连接
-            x_t = _TimeSlice(t, seq_len, input_size)(input)
-            
-            # LSTM 单元前向传播
-            h_t, c_t = self._cell_forward(x_t, h_t, c_t)
-            outputs.append(h_t)
-        
-        return _StackTime(self.hidden_size)(*outputs), c_t
-    
-    def _cell_forward(self, x_t: Tensor, h_prev: Tensor, c_prev: Tensor):
-        """LSTM 单元前向传播。"""
-        # 输入门
-        i_t = self._gate(x_t, h_prev, self.W_ii, self.W_hi, self.b_i, activation='sigmoid')
-        
-        # 遗忘门
-        f_t = self._gate(x_t, h_prev, self.W_if, self.W_hf, self.b_f, activation='sigmoid')
-        
-        # 候选单元状态
-        g_t = self._gate(x_t, h_prev, self.W_ig, self.W_hg, self.b_g, activation='tanh')
-        
-        # 输出门
-        o_t = self._gate(x_t, h_prev, self.W_io, self.W_ho, self.b_o, activation='sigmoid')
-        
-        # 单元状态更新
-        c_t = self._update_cell(f_t, c_prev, i_t, g_t)
-        
-        # 隐藏状态
-        h_t = self._update_hidden(o_t, c_t)
-        
-        return h_t, c_t
-    
-    def _update_cell(self, f_t: Tensor, c_prev: Tensor,
-                     i_t: Tensor, g_t: Tensor) -> Tensor:
-        """更新单元状态：c_t = f_t * c_prev + i_t * g_t"""
-        return self._add_variables(self._mul_variables(f_t, c_prev),
-                                   self._mul_variables(i_t, g_t))
 
-    def _update_hidden(self, o_t: Tensor, c_t: Tensor) -> Tensor:
-        """更新隐藏状态：h_t = o_t * tanh(c_t)"""
-        return self._mul_variables(o_t, self._apply_tanh(c_t))
+    def __init__(self, input_size: int, hidden_size: int,
+                 use_bias: bool = True) -> None:
+        super().__init__(input_size, hidden_size, use_bias)
+
+        bound = 1.0 / math.sqrt(hidden_size)
+        for gate_name in ('i', 'f', 'g', 'o'):
+            self._create_gate_weights(gate_name, input_size, hidden_size, bound, use_bias)
+
+    def _init_states(self, batch_size: int, initial_states):
+        """初始化 (h_0, c_0) 状态对。"""
+        if initial_states is not None:
+            return initial_states
+        return self._init_hidden(batch_size), self._init_hidden(batch_size)
+
+    def _cell_forward(self, x_t: Tensor, states: tuple) -> tuple:
+        """LSTM 单元前向传播。"""
+        h_prev, c_prev = states
+
+        input_gate = self._gate(x_t, h_prev, self.W_ii, self.W_hi, self.b_i, 'sigmoid')
+        forget_gate = self._gate(x_t, h_prev, self.W_if, self.W_hf, self.b_f, 'sigmoid')
+        candidate = self._gate(x_t, h_prev, self.W_ig, self.W_hg, self.b_g, 'tanh')
+        output_gate = self._gate(x_t, h_prev, self.W_io, self.W_ho, self.b_o, 'sigmoid')
+
+        cell_state = forget_gate * c_prev + input_gate * candidate
+        hidden_state = output_gate * cell_state.tanh()
+        return hidden_state, cell_state
+
+    def _extract_hidden(self, states: tuple) -> Tensor:
+        """从 (h_t, c_t) 中提取 h_t。"""
+        return states[0]
+
+    def _pack_output(self, stacked_output: Tensor, final_states: tuple):
+        """返回 (所有时间步的隐藏状态, 最后的单元状态)。"""
+        return stacked_output, final_states[1]
 
     def __repr__(self) -> str:
-        """返回层的字符串表示。"""
         return (f"LSTM(input_size={self.input_size}, hidden_size={self.hidden_size}, "
                 f"use_bias={self.use_bias})")
 
 
 class GRU(RNNBase):
     """门控循环单元层。
-    
+
     实现 GRU 单元，包含重置门和更新门。
-    
+
     公式：
-        r_t = sigmoid(W_ir @ x_t + W_hr @ h_{t-1} + b_r)  # 重置门
-        z_t = sigmoid(W_iz @ x_t + W_hz @ h_{t-1} + b_z)  # 更新门
-        n_t = tanh(W_in @ x_t + r_t * (W_hn @ h_{t-1}) + b_n)  # 新候选状态
-        h_t = (1 - z_t) * n_t + z_t * h_{t-1}              # 隐藏状态
-    
-    Attributes:
-        input_size: 输入特征维度
-        hidden_size: 隐藏状态维度
-        use_bias: 是否使用偏置
-    
+        r_t = sigmoid(W_ir @ x_t + W_hr @ h_{t-1} + b_r)
+        z_t = sigmoid(W_iz @ x_t + W_hz @ h_{t-1} + b_z)
+        n_t = tanh(W_in @ x_t + r_t * (W_hn @ h_{t-1}) + b_n)
+        h_t = (1 - z_t) * n_t + z_t * h_{t-1}
+
     Example:
         >>> gru = GRU(input_size=10, hidden_size=20)
         >>> x = Tensor(NdArray.randn((batch_size, seq_len, 10)))
@@ -345,94 +272,30 @@ class GRU(RNNBase):
         >>> print(h.value.shape)
         (batch_size, seq_len, 20)
     """
-    
-    def __init__(self, input_size: int, hidden_size: int, use_bias: bool = True):
-        """初始化 GRU 层。
-        
-        Args:
-            input_size: 输入特征维度
-            hidden_size: 隐藏状态维度
-            use_bias: 是否使用偏置
-        """
-        super().__init__()
-        
-        self.input_size = input_size
-        self.hidden_size = hidden_size
-        self.use_bias = use_bias
-        
-        k = 1.0 / math.sqrt(hidden_size)
-        
-        # 重置门
-        self.W_ir = Parameter(init.uniform(-k, k, (hidden_size, input_size)), name='W_ir')
-        self.W_hr = Parameter(init.uniform(-k, k, (hidden_size, hidden_size)), name='W_hr')
-        
-        # 更新门
-        self.W_iz = Parameter(init.uniform(-k, k, (hidden_size, input_size)), name='W_iz')
-        self.W_hz = Parameter(init.uniform(-k, k, (hidden_size, hidden_size)), name='W_hz')
-        
-        # 新候选状态
-        self.W_in = Parameter(init.uniform(-k, k, (hidden_size, input_size)), name='W_in')
-        self.W_hn = Parameter(init.uniform(-k, k, (hidden_size, hidden_size)), name='W_hn')
-        
-        if use_bias:
-            self.b_r = Parameter(init.uniform(-k, k, (hidden_size,)), name='b_r')
-            self.b_z = Parameter(init.uniform(-k, k, (hidden_size,)), name='b_z')
-            self.b_n = Parameter(init.uniform(-k, k, (hidden_size,)), name='b_n')
-        else:
-            self.b_r = self.b_z = self.b_n = None
-    
-    def forward(self, input: Tensor, h_0: Tensor = None) -> Tensor:
-        """前向传播（实现简化版本，与 RNN 类似）。"""
-        # 简化实现，参考 RNN 和 LSTM 的模式
-        batch_size, seq_len, input_size = input.value.shape.dims
-        if input_size != self.input_size:
-            raise ValueError(
-                f"Expected input_size={self.input_size}, got {input_size}"
-            )
-        
-        if h_0 is None:
-            h_t = Tensor(NdArray.zeros((batch_size, self.hidden_size)), requires_grad=False)
-        else:
-            h_t = h_0
-        
-        outputs = []
-        
-        for t in range(seq_len):
-            x_t = _TimeSlice(t, seq_len, input_size)(input)
-            
-            h_t = self._cell_forward(x_t, h_t)
-            outputs.append(h_t)
-        
-        return _StackTime(self.hidden_size)(*outputs)
-    
+
+    def __init__(self, input_size: int, hidden_size: int,
+                 use_bias: bool = True) -> None:
+        super().__init__(input_size, hidden_size, use_bias)
+
+        bound = 1.0 / math.sqrt(hidden_size)
+        for gate_name in ('r', 'z', 'n'):
+            self._create_gate_weights(gate_name, input_size, hidden_size, bound, use_bias)
+
     def _cell_forward(self, x_t: Tensor, h_prev: Tensor) -> Tensor:
         """GRU 单元前向传播。"""
-        # 重置门
-        r_t = self._gate(x_t, h_prev, self.W_ir, self.W_hr, self.b_r, 'sigmoid')
-        
-        # 更新门
-        z_t = self._gate(x_t, h_prev, self.W_iz, self.W_hz, self.b_z, 'sigmoid')
-        
+        reset_gate = self._gate(x_t, h_prev, self.W_ir, self.W_hr, self.b_r, 'sigmoid')
+        update_gate = self._gate(x_t, h_prev, self.W_iz, self.W_hz, self.b_z, 'sigmoid')
+
         # 新候选状态：n_t = tanh(W_in @ x_t + r_t * (W_hn @ h_prev) + b_n)
-        n_t = self._linear(x_t, self.W_in, True)
-        h_proj = self._linear(h_prev, self.W_hn, True)
-        gated_h = self._mul_variables(r_t, h_proj)
-        n_t = self._add_variables(n_t, gated_h)
+        candidate = x_t.matmul(self.W_in.transpose()) + reset_gate * h_prev.matmul(self.W_hn.transpose())
         if self.b_n is not None:
-            n_t = self._add_bias(n_t, self.b_n)
-        n_t = self._apply_tanh(n_t)
-        
+            candidate = candidate + self.b_n
+        candidate = candidate.tanh()
+
         # 更新隐藏状态：h_t = (1 - z_t) * n_t + z_t * h_prev
-        h_t = self._gru_update(z_t, n_t, h_prev)
-        
-        return h_t
-    
-    def _gru_update(self, z_t: Tensor, n_t: Tensor, h_prev: Tensor) -> Tensor:
-        """GRU 状态更新。"""
-        one_minus_z = (z_t * -1.0) + 1.0
-        return one_minus_z * n_t + z_t * h_prev
-    
+        one_minus_update = (update_gate * -1.0) + 1.0
+        return one_minus_update * candidate + update_gate * h_prev
+
     def __repr__(self) -> str:
-        """返回层的字符串表示。"""
         return (f"GRU(input_size={self.input_size}, hidden_size={self.hidden_size}, "
                 f"use_bias={self.use_bias})")

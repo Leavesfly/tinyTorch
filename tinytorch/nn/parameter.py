@@ -30,7 +30,7 @@ class Parameter(Tensor):
         >>> output = input @ weight + bias
     """
     
-    def __init__(self, value: NdArray, name: str = None):
+    def __init__(self, value: NdArray, name: Optional[str] = None):
         """初始化参数。
         
         Args:
@@ -66,9 +66,9 @@ class Parameter(Tensor):
             }
         return {
             'name': self.name,
-            'value': self.value.to_list() if hasattr(self.value, 'to_list') else self.value,
-            'shape': self.value.shape.dims if hasattr(self.value, 'shape') else None,
-            'dtype': self.value.dtype if hasattr(self.value, 'dtype') else 'float32',
+            'value': self.value.to_list(),
+            'shape': self.value.shape.dims,
+            'dtype': self.value.dtype,
             'requires_grad': self.requires_grad,
         }
     

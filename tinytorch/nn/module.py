@@ -35,7 +35,7 @@ class Module:
         ...         return x @ self.param
     """
     
-    def __init__(self, name: str = None):
+    def __init__(self, name: Optional[str] = None):
         """初始化模块。
         
         Args:
@@ -119,7 +119,7 @@ class Module:
                 object.__delattr__(self, name)
         else:
             if not isinstance(tensor, Tensor):
-                raise TypeError(f"ndarr must be an instance of Tensor, got {type(tensor)}")
+                raise TypeError(f"tensor must be an instance of Tensor, got {type(tensor)}")
             self._buffers[name] = tensor
             object.__setattr__(self, name, tensor)
     
@@ -143,6 +143,34 @@ class Module:
         
         return params
     
+    def _named_members(
+        self,
+        member_attr: str,
+        recurse_method: str,
+        prefix: str = '',
+        recursive: bool = True,
+    ) -> Iterator[Tuple[str, Any]]:
+        """遍历指定注册表中的成员（参数或缓冲区）。
+
+        Args:
+            member_attr: 注册表属性名，如 ``'_parameters'`` 或 ``'_buffers'``
+            recurse_method: 子模块上递归调用的方法名
+            prefix: 名称前缀，用于递归时构建完整路径
+            recursive: 是否递归获取子模块的成员
+
+        Yields:
+            (成员名称, 成员值) 的元组
+        """
+        members: Dict = getattr(self, member_attr, {})
+        for name, member in members.items():
+            full_name = f"{prefix}.{name}" if prefix else name
+            yield (full_name, member)
+
+        if recursive:
+            for module_name, module in self._modules.items():
+                module_prefix = f"{prefix}.{module_name}" if prefix else module_name
+                yield from getattr(module, recurse_method)(prefix=module_prefix, recursive=True)
+
     def named_parameters(self, prefix: str = '', recursive: bool = True) -> Iterator[Tuple[str, 'Parameter']]:
         """获取所有参数的名称和值。
         
@@ -153,21 +181,10 @@ class Module:
         Yields:
             (参数名称, 参数值) 的元组
         """
-        # 生成当前模块的参数
-        for name, param in self._parameters.items():
-            full_name = f"{prefix}.{name}" if prefix else name
-            yield (full_name, param)
-        
-        # 递归生成子模块的参数
-        if recursive:
-            for module_name, module in self._modules.items():
-                module_prefix = f"{prefix}.{module_name}" if prefix else module_name
-                yield from module.named_parameters(prefix=module_prefix, recursive=True)
+        yield from self._named_members('_parameters', 'named_parameters', prefix, recursive)
 
     def named_buffers(self, prefix: str = '', recursive: bool = True) -> Iterator[Tuple[str, Tensor]]:
         """获取所有缓冲区的名称和值。
-        
-        缓冲区是不可训练的张量，通常用于存储运行时状态（如 BatchNorm 的均值和方差）。
         
         Args:
             prefix: 缓冲区名称的前缀，用于递归时构建完整名称
@@ -176,14 +193,7 @@ class Module:
         Yields:
             (缓冲区名称, 缓冲区值) 的元组，其中名称包含完整路径
         """
-        for name, buffer in self._buffers.items():
-            full_name = f"{prefix}.{name}" if prefix else name
-            yield (full_name, buffer)
-
-        if recursive:
-            for module_name, module in self._modules.items():
-                module_prefix = f"{prefix}.{module_name}" if prefix else module_name
-                yield from module.named_buffers(prefix=module_prefix, recursive=True)
+        yield from self._named_members('_buffers', 'named_buffers', prefix, recursive)
     
     def modules(self) -> Iterator['Module']:
         """递归获取所有模块（包括自身）。
@@ -305,23 +315,35 @@ class Module:
 
         object.__delattr__(self, name)
     
-    def __repr__(self) -> str:
-        """返回模块的字符串表示。"""
-        # 构建子模块列表
+    @staticmethod
+    def _format_child_modules(children: Iterator[Tuple[str, 'Module']], class_name: str) -> str:
+        """格式化子模块列表为可读的字符串表示。
+
+        此方法供 ``Module.__repr__``、``Sequential.__repr__`` 和
+        ``ModuleList.__repr__`` 等共用，避免重复的格式化逻辑。
+
+        Args:
+            children: (名称, 模块) 的迭代器
+            class_name: 外层容器的类名
+
+        Returns:
+            格式化后的字符串
+        """
         lines = []
-        for key, module in self._modules.items():
-            # 获取子模块的表示并缩进
+        for key, module in children:
             mod_str = repr(module)
             mod_str = '\n'.join('  ' + line for line in mod_str.split('\n'))
             lines.append(f"({key}): {mod_str}")
-        
-        # 构建最终表示
-        main_str = f"{self.__class__.__name__}("
+
+        main_str = f"{class_name}("
         if lines:
             main_str += '\n  ' + '\n  '.join(lines) + '\n'
         main_str += ')'
-        
         return main_str
+
+    def __repr__(self) -> str:
+        """返回模块的字符串表示。"""
+        return self._format_child_modules(self._modules.items(), self.__class__.__name__)
 
     @staticmethod
     def _tensor_state(tensor: Tensor, kind: str) -> Dict[str, Any]:
@@ -391,39 +413,21 @@ class Module:
         from tinytorch.ndarr.ndarray import NdArray
         from tinytorch.ndarr.shape import Shape
 
-        missing_keys = []
-        unexpected_keys = []
+        expected_tensors = dict(self.named_parameters())
+        expected_tensors.update(dict(self.named_buffers()))
 
-        expected_parameters = dict(self.named_parameters())
-        expected_buffers = dict(self.named_buffers())
-        expected_keys = set(expected_parameters) | set(expected_buffers)
+        missing_keys = [name for name in expected_tensors if name not in state_dict]
+        unexpected_keys = [key for key in state_dict if key not in expected_tensors]
 
-        def _load_tensor(entry: Dict[str, Any], existing_value) -> NdArray:
+        for name, tensor in expected_tensors.items():
+            if name not in state_dict:
+                continue
+            entry = state_dict[name]
             shape_dims = entry.get('shape')
-            shape = Shape(tuple(shape_dims)) if shape_dims is not None else existing_value.shape
-            return NdArray(entry['value'], shape, dtype=entry.get('dtype', existing_value.dtype))
-
-        for name, param in expected_parameters.items():
-            if name not in state_dict:
-                missing_keys.append(name)
-                continue
-            entry = state_dict[name]
-            param.value = _load_tensor(entry, param.value)
+            shape = Shape(tuple(shape_dims)) if shape_dims is not None else tensor.value.shape
+            tensor.value = NdArray(entry['value'], shape, dtype=entry.get('dtype', tensor.value.dtype))
             if 'requires_grad' in entry:
-                param.requires_grad = entry['requires_grad']
-
-        for name, buffer in expected_buffers.items():
-            if name not in state_dict:
-                missing_keys.append(name)
-                continue
-            entry = state_dict[name]
-            buffer.value = _load_tensor(entry, buffer.value)
-            if 'requires_grad' in entry:
-                buffer.requires_grad = entry['requires_grad']
-
-        for key in state_dict:
-            if key not in expected_keys:
-                unexpected_keys.append(key)
+                tensor.requires_grad = entry['requires_grad']
 
         if strict and (missing_keys or unexpected_keys):
             raise KeyError(
@@ -431,10 +435,7 @@ class Module:
                 f"unexpected_keys={unexpected_keys}"
             )
 
-        return {
-            'missing_keys': missing_keys,
-            'unexpected_keys': unexpected_keys,
-        }
+        return {'missing_keys': missing_keys, 'unexpected_keys': unexpected_keys}
     
     def to_dict(self) -> Dict[str, Any]:
         """将模块转换为字典（用于序列化）。

@@ -9,6 +9,12 @@ Version: 0.1.0
 from typing import Optional, Union
 from tinytorch.ndarr import NdArray, Shape
 
+# 算子模块路径注册表，集中管理所有算子的模块位置
+_OPS_BASIC = 'tinytorch.autograd.ops.basic'
+_OPS_MATH = 'tinytorch.autograd.ops.math_ops'
+_OPS_MATRIX = 'tinytorch.autograd.ops.matrix'
+_OPS_REDUCE = 'tinytorch.autograd.ops.reduce'
+_OPS_ACTIVATION = 'tinytorch.autograd.ops.activation'
 
 class Tensor:
     _grad_enabled = True
@@ -31,7 +37,7 @@ class Tensor:
         >>> print(x.grad)
     """
     
-    def __init__(self, value: NdArray, name: str = None, requires_grad: bool = True):
+    def __init__(self, value: NdArray, name: Optional[str] = None, requires_grad: bool = True):
         """初始化一个 Tensor。
         
         参数:
@@ -50,16 +56,29 @@ class Tensor:
     
     def backward(self, grad_output: Optional[Union['Tensor', NdArray]] = None, retain_graph: bool = False):
         """通过反向传播计算梯度。
-        
-        这采用拓扑排序对计算图实现反向模式自动微分。
-        
+
+        采用拓扑排序对计算图实现反向模式自动微分。
+
         参数:
             grad_output: 输出梯度。标量输出可省略；非标量输出必须显式提供。
             retain_graph: 是否保留计算图
         """
         if not self.requires_grad:
             return
-        
+
+        self._init_grad(grad_output)
+        topo_order = self._topological_sort()
+        self._propagate_gradients(topo_order)
+
+        if not retain_graph:
+            self.unchain_backward()
+
+    def _init_grad(self, grad_output: Optional[Union['Tensor', NdArray]]) -> None:
+        """初始化输出节点的梯度。
+
+        参数:
+            grad_output: 外部提供的梯度；标量输出可为 None（默认全 1）。
+        """
         if grad_output is not None:
             if isinstance(grad_output, Tensor):
                 grad_output = grad_output.value
@@ -67,15 +86,11 @@ class Tensor:
                 raise TypeError(f"grad_output must be NdArray or Tensor, got {type(grad_output)}")
             if grad_output.shape != self.value.shape:
                 raise ValueError(
-                    f"grad_output shape {grad_output.shape.dims} does not match output shape "
-                    f"{self.value.shape.dims}"
+                    f"grad_output shape {grad_output.shape.dims} does not match "
+                    f"output shape {self.value.shape.dims}"
                 )
-            if self.grad is None:
-                self.grad = grad_output
-            else:
-                self.grad = self.grad.add(grad_output)
+            self.grad = grad_output if self.grad is None else self.grad.add(grad_output)
         else:
-            # 仅标量输出可默认使用全 1 梯度
             if self.value.shape.size != 1:
                 raise ValueError(
                     "grad_output must be provided for non-scalar outputs "
@@ -83,57 +98,58 @@ class Tensor:
                 )
             if self.grad is None:
                 self.grad = NdArray.ones(self.value.shape, self.value.dtype)
-        
-        # 迭代式拓扑排序，避免深图递归栈溢出
+
+    def _topological_sort(self) -> list['Tensor']:
+        """对计算图进行迭代式拓扑排序，避免深图递归栈溢出。
+
+        Returns:
+            按拓扑顺序排列的、拥有 creator 的 Tensor 列表
+        """
+        _UNVISITED, _IN_PROGRESS, _DONE = 0, 1, 2
+
         topo_order = []
-        # visit_state 字典记录节点的访问状态：
-        # 0: 未访问 - 节点尚未被处理
-        # 1: 访问中 - 节点正在被处理（已在栈中，正在遍历其输入）
-        # 2: 已完成 - 节点及其所有输入都已处理完毕
-        visit_state = {}  # 0: 未访问, 1: 访问中, 2: 已完成
+        visit_state = {}
         stack = [self]
 
         while stack:
-            var = stack[-1]
-            state = visit_state.get(var, 0)
+            node = stack[-1]
+            state = visit_state.get(node, _UNVISITED)
 
-            if state == 0:
-                visit_state[var] = 1
-                if var.creator is not None:
-                    for input_var in var.creator.inputs:
-                        if visit_state.get(input_var, 0) == 0:
-                            stack.append(input_var)
-            elif state == 1:
+            if state == _UNVISITED:
+                visit_state[node] = _IN_PROGRESS
+                if node.creator is not None:
+                    for input_node in node.creator.inputs:
+                        if visit_state.get(input_node, _UNVISITED) == _UNVISITED:
+                            stack.append(input_node)
+            elif state == _IN_PROGRESS:
                 stack.pop()
-                visit_state[var] = 2
-                if var.creator is not None:
-                    topo_order.append(var)
+                visit_state[node] = _DONE
+                if node.creator is not None:
+                    topo_order.append(node)
             else:
                 stack.pop()
-        
-        # 按逆拓扑顺序进行反向传播
-        for var in reversed(topo_order):
-            if var.creator is None:
+
+        return topo_order
+
+    @staticmethod
+    def _propagate_gradients(topo_order: list['Tensor']) -> None:
+        """按逆拓扑顺序将梯度从输出传播到输入。
+
+        参数:
+            topo_order: _topological_sort 返回的有序节点列表
+        """
+        for node in reversed(topo_order):
+            if node.creator is None:
                 continue
-            
-            # 获取该变量输出的梯度
-            grad_output = var.grad
-            
-            # 计算输入的梯度
-            grad_inputs = var.creator.backward(grad_output)
-            
-            # 将梯度累加到输入变量
-            for input_var, grad_input in zip(var.creator.inputs, grad_inputs):
-                if input_var.requires_grad:
-                    if input_var.grad is None:
-                        input_var.grad = grad_input
+
+            grad_inputs = node.creator.backward(node.grad)
+
+            for input_node, grad_input in zip(node.creator.inputs, grad_inputs):
+                if input_node.requires_grad:
+                    if input_node.grad is None:
+                        input_node.grad = grad_input
                     else:
-                        # 累加梯度（对于多次使用的变量）
-                        input_var.grad = input_var.grad.add(grad_input)
-        
-        # 如果不保留计算图，则清理它
-        if not retain_graph:
-            self.unchain_backward()
+                        input_node.grad = input_node.grad.add(grad_input)
     
     def unchain_backward(self):
         """释放计算图以释放内存。
@@ -169,8 +185,6 @@ class Tensor:
         """
         return Tensor(self.value.copy(), self.name + "_detached", requires_grad=False)
     
-    # ==================== 辅助方法 ====================
-
     @staticmethod
     def _ensure_tensor(value: Union["Tensor", int, float]) -> 'Tensor':
         """将标量值转换为不跟踪梯度的 Tensor。
@@ -185,110 +199,112 @@ class Tensor:
             return Tensor(NdArray([value]), requires_grad=False)
         raise TypeError(f"Cannot convert {type(value)} to Tensor")
 
-    # ==================== 算术运算 ====================
-    
+    def _apply_binary_op(self, module_path: str, op_name: str, other: Union["Tensor", int, float]) -> 'Tensor':
+        """执行二元运算的通用辅助方法。
+
+        Args:
+            module_path: 运算类所在的模块路径，如 ``'tinytorch.autograd.ops.basic'``
+            op_name: 运算类名，如 ``'Add'``
+            other: 另一个操作数
+
+        Returns:
+            运算结果 Tensor
+        """
+        import importlib
+        op_class = getattr(importlib.import_module(module_path), op_name)
+        other = self._ensure_tensor(other)
+        return op_class()(self, other)
+
+    def _apply_unary_op(self, module_path: str, op_name: str, **kwargs) -> 'Tensor':
+        """执行一元运算的通用辅助方法。
+
+        Args:
+            module_path: 运算类所在的模块路径
+            op_name: 运算类名
+            **kwargs: 传递给运算类构造函数的参数
+
+        Returns:
+            运算结果 Tensor
+        """
+        import importlib
+        op_class = getattr(importlib.import_module(module_path), op_name)
+        return op_class(**kwargs)(self)
+
     def add(self, other: Union["Tensor", int, float]) -> 'Tensor':
         """加法运算。"""
-        from tinytorch.autograd.ops.basic import Add
-        other = self._ensure_tensor(other)
-        return Add()(self, other)
-    
+        return self._apply_binary_op(_OPS_BASIC, 'Add', other)
+
     def sub(self, other: Union["Tensor", int, float]) -> 'Tensor':
         """减法运算。"""
-        from tinytorch.autograd.ops.basic import Sub
-        other = self._ensure_tensor(other)
-        return Sub()(self, other)
-    
+        return self._apply_binary_op(_OPS_BASIC, 'Sub', other)
+
     def mul(self, other: Union["Tensor", int, float]) -> 'Tensor':
         """乘法运算。"""
-        from tinytorch.autograd.ops.basic import Mul
-        other = self._ensure_tensor(other)
-        return Mul()(self, other)
-    
+        return self._apply_binary_op(_OPS_BASIC, 'Mul', other)
+
     def div(self, other: Union["Tensor", int, float]) -> 'Tensor':
         """除法运算。"""
-        from tinytorch.autograd.ops.basic import Div
-        other = self._ensure_tensor(other)
-        return Div()(self, other)
-    
+        return self._apply_binary_op(_OPS_BASIC, 'Div', other)
+
     def neg(self) -> 'Tensor':
         """取负运算。"""
-        from tinytorch.autograd.ops.basic import Neg
-        return Neg()(self)
-    
+        return self._apply_unary_op(_OPS_BASIC, 'Neg')
+
     def pow(self, exponent: float) -> 'Tensor':
         """幂运算。"""
         from tinytorch.autograd.ops.math_ops import Pow
         return Pow(exponent)(self)
-    
-    # ==================== 数学运算 ====================
-    
+
     def exp(self) -> 'Tensor':
         """指数运算。"""
-        from tinytorch.autograd.ops.math_ops import Exp
-        return Exp()(self)
-    
+        return self._apply_unary_op(_OPS_MATH, 'Exp')
+
     def log(self) -> 'Tensor':
         """自然对数运算。"""
-        from tinytorch.autograd.ops.math_ops import Log
-        return Log()(self)
-    
+        return self._apply_unary_op(_OPS_MATH, 'Log')
+
     def sqrt(self) -> 'Tensor':
         """平方根运算。"""
-        from tinytorch.autograd.ops.math_ops import Sqrt
-        return Sqrt()(self)
-    
-    # ==================== 矩阵运算 ====================
-    
+        return self._apply_unary_op(_OPS_MATH, 'Sqrt')
+
     def matmul(self, other: 'Tensor') -> 'Tensor':
         """矩阵乘法。"""
-        from tinytorch.autograd.ops.matrix import MatMul
-        return MatMul()(self, other)
-    
-    def transpose(self, axes=None) -> 'Tensor':
+        return self._apply_binary_op(_OPS_MATRIX, 'MatMul', other)
+
+    def transpose(self, axes: Optional[tuple] = None) -> 'Tensor':
         """转置运算。"""
         from tinytorch.autograd.ops.matrix import Transpose
         return Transpose(axes)(self)
-    
-    def reshape(self, new_shape) -> 'Tensor':
+
+    def reshape(self, new_shape: tuple) -> 'Tensor':
         """重塑形状运算。"""
         from tinytorch.autograd.ops.matrix import Reshape
         return Reshape(new_shape)(self)
-    
-    def sum(self, axis=None, keepdims=False) -> 'Tensor':
+
+    def sum(self, axis: Optional[Union[int, tuple]] = None, keepdims: bool = False) -> 'Tensor':
         """求和约简。"""
-        from tinytorch.autograd.ops.reduce import Sum
-        return Sum(axis, keepdims)(self)
-    
-    def mean(self, axis=None, keepdims=False) -> 'Tensor':
+        return self._apply_unary_op(_OPS_REDUCE, 'Sum', axis=axis, keepdims=keepdims)
+
+    def mean(self, axis: Optional[Union[int, tuple]] = None, keepdims: bool = False) -> 'Tensor':
         """求均值约简。"""
-        from tinytorch.autograd.ops.reduce import Mean
-        return Mean(axis, keepdims)(self)
-    
-    # ==================== 激活函数 ====================
-    
+        return self._apply_unary_op(_OPS_REDUCE, 'Mean', axis=axis, keepdims=keepdims)
+
     def relu(self) -> 'Tensor':
         """ReLU 激活函数。"""
-        from tinytorch.autograd.ops.activation import ReLU
-        return ReLU()(self)
-    
+        return self._apply_unary_op(_OPS_ACTIVATION, 'ReLU')
+
     def sigmoid(self) -> 'Tensor':
         """Sigmoid 激活函数。"""
-        from tinytorch.autograd.ops.activation import Sigmoid
-        return Sigmoid()(self)
-    
+        return self._apply_unary_op(_OPS_ACTIVATION, 'Sigmoid')
+
     def tanh(self) -> 'Tensor':
         """Tanh 激活函数。"""
-        from tinytorch.autograd.ops.activation import Tanh
-        return Tanh()(self)
-    
+        return self._apply_unary_op(_OPS_ACTIVATION, 'Tanh')
+
     def leaky_relu(self, negative_slope: float = 0.01) -> 'Tensor':
         """LeakyReLU 激活函数。"""
-        from tinytorch.autograd.ops.activation import LeakyReLU
-        return LeakyReLU(negative_slope=negative_slope)(self)
-    
-    # ==================== 属性 ====================
-    
+        return self._apply_unary_op(_OPS_ACTIVATION, 'LeakyReLU', negative_slope=negative_slope)
+
     @property
     def shape(self) -> Shape:
         """获取张量形状。"""
@@ -296,7 +312,7 @@ class Tensor:
     
     @property
     def data(self) -> list:
-        """获取张量的数据列表（局平）。"""
+        """获取张量的扁平数据列表。"""
         return self.value.data
     
     @data.setter
@@ -321,49 +337,49 @@ class Tensor:
     
     # ==================== 运算符重载 ====================
     
-    def __add__(self, other):
+    def __add__(self, other: Union["Tensor", int, float]) -> 'Tensor':
         """加法运算符。"""
         return self.add(other)
     
-    def __radd__(self, other):
+    def __radd__(self, other: Union["Tensor", int, float]) -> 'Tensor':
         """右加法运算符。"""
         return self.add(other)
     
-    def __sub__(self, other):
+    def __sub__(self, other: Union["Tensor", int, float]) -> 'Tensor':
         """减法运算符。"""
         return self.sub(other)
     
-    def __rsub__(self, other):
+    def __rsub__(self, other: Union["Tensor", int, float]) -> 'Tensor':
         """右减法运算符。"""
         other = self._ensure_tensor(other)
         return other.sub(self)
     
-    def __mul__(self, other):
+    def __mul__(self, other: Union["Tensor", int, float]) -> 'Tensor':
         """乘法运算符。"""
         return self.mul(other)
     
-    def __rmul__(self, other):
+    def __rmul__(self, other: Union["Tensor", int, float]) -> 'Tensor':
         """右乘法运算符。"""
         return self.mul(other)
     
-    def __truediv__(self, other):
+    def __truediv__(self, other: Union["Tensor", int, float]) -> 'Tensor':
         """除法运算符。"""
         return self.div(other)
     
-    def __rtruediv__(self, other):
+    def __rtruediv__(self, other: Union["Tensor", int, float]) -> 'Tensor':
         """右除法运算符。"""
         other = self._ensure_tensor(other)
         return other.div(self)
     
-    def __neg__(self):
+    def __neg__(self) -> 'Tensor':
         """取负运算符。"""
         return self.neg()
     
-    def __pow__(self, exponent):
+    def __pow__(self, exponent: Union[int, float]) -> 'Tensor':
         """幂运算符。"""
         return self.pow(exponent)
     
-    def __matmul__(self, other):
+    def __matmul__(self, other: 'Tensor') -> 'Tensor':
         """矩阵乘法运算符。"""
         return self.matmul(other)
     
@@ -371,10 +387,8 @@ class Tensor:
         """字符串表示。"""
         grad_str = f", grad={self.grad}" if self.grad is not None else ""
         return f"Tensor(name={self.name}, shape={self.value.shape}, requires_grad={self.requires_grad}{grad_str})"
-    
-    def __str__(self) -> str:
-        """字符串表示。"""
-        return self.__repr__()
+
+    __str__ = __repr__
 
 
 class _NoGrad:

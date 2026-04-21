@@ -49,27 +49,27 @@ class Model:
             'framework': 'tinyTorch'
         }
     
-    def forward(self, input: Tensor) -> Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         """前向传播。
-        
+
         Args:
-            input: 输入变量
-        
+            x: 输入张量
+
         Returns:
-            输出变量
+            输出张量
         """
-        return self.module(input)
-    
-    def __call__(self, input: Tensor) -> Tensor:
+        return self.module(x)
+
+    def __call__(self, x: Tensor) -> Tensor:
         """调用模型，执行前向传播。
-        
+
         Args:
-            input: 输入变量
-        
+            x: 输入张量
+
         Returns:
-            输出变量
+            输出张量
         """
-        return self.forward(input)
+        return self.forward(x)
     
     def parameters(self) -> List[Parameter]:
         """获取所有参数。
@@ -101,10 +101,32 @@ class Model:
         """清除所有参数的梯度。"""
         self.module.zero_grad()
     
+    @staticmethod
+    def _save_pickle(data: Any, file_path: str) -> None:
+        """将数据序列化到文件。
+
+        .. warning::
+            使用 Python pickle 序列化，**切勿加载来自不可信来源的文件**。
+        """
+        with open(file_path, 'wb') as f:
+            pickle.dump(data, f)
+
+    @staticmethod
+    def _load_pickle(file_path: str) -> Any:
+        """从文件反序列化数据。
+
+        .. warning::
+            使用 Python pickle 反序列化，**切勿加载来自不可信来源的文件**。
+        """
+        with open(file_path, 'rb') as f:
+            return pickle.load(f)
+
     def save(self, file_path: str) -> None:
-        """保存模型到文件。
+        """保存模型到文件（元数据 + 状态字典）。
         
-        保存模型元数据和模块状态字典。
+        .. warning::
+            此方法使用 Python pickle 进行序列化。pickle 文件可以包含任意可执行代码，
+            **切勿加载来自不可信来源的模型文件**，否则可能导致任意代码执行（RCE）。
         
         Args:
             file_path: 保存路径
@@ -115,13 +137,15 @@ class Model:
             'training': self.module.training,
             'module_state_dict': self.module.state_dict(),
         }
-        
-        with open(file_path, 'wb') as f:
-            pickle.dump(model_state, f)
+        self._save_pickle(model_state, file_path)
     
     @staticmethod
     def load(file_path: str, module: Optional[Module] = None) -> 'Model':
         """从文件加载模型。
+        
+        .. warning::
+            此方法使用 Python pickle 进行反序列化。pickle 文件可以包含任意可执行代码，
+            **切勿加载来自不可信来源的模型文件**，否则可能导致任意代码执行（RCE）。
         
         Args:
             file_path: 模型文件路径
@@ -131,16 +155,10 @@ class Model:
             Model 实例
         
         Note:
-            为什么需要传入 module 参数：
-            模型文件只保存了参数的状态字典（state_dict），不包含模型的结构定义。
+            模型文件只保存参数的状态字典（state_dict），不包含模型的结构定义。
             为了恢复模型，必须先构建一个与保存时相同结构的模块实例，然后将参数加载进去。
-            这样设计的好处是：
-            1. 模型文件更小，只保存参数不保存代码结构
-            2. 允许在加载时修改模型结构（如加载到不同架构的模型）
-            3. 避免了序列化整个模型对象带来的安全和兼容性问题
         """
-        with open(file_path, 'rb') as f:
-            model_state = pickle.load(f)
+        model_state = Model._load_pickle(file_path)
 
         if module is None:
             raise ValueError(
@@ -158,26 +176,24 @@ class Model:
     def save_parameters(self, file_path: str) -> None:
         """仅保存模型参数。
         
+        .. warning::
+            此方法使用 Python pickle 进行序列化，**切勿加载来自不可信来源的参数文件**。
+        
         Args:
             file_path: 保存路径
         """
-        params_state = {
-            'name': self.name,
-            'parameters': self.module.state_dict()
-        }
-        
-        with open(file_path, 'wb') as f:
-            pickle.dump(params_state, f)
+        self._save_pickle({'name': self.name, 'parameters': self.module.state_dict()}, file_path)
     
     def load_parameters(self, file_path: str) -> None:
         """加载模型参数。
         
+        .. warning::
+            此方法使用 Python pickle 进行反序列化，**切勿加载来自不可信来源的参数文件**。
+        
         Args:
             file_path: 参数文件路径
         """
-        with open(file_path, 'rb') as f:
-            params_state = pickle.load(f)
-
+        params_state = self._load_pickle(file_path)
         self.module.load_state_dict(params_state['parameters'], strict=False)
     
     def __repr__(self) -> str:

@@ -10,7 +10,8 @@ from tinytorch.ml.model import Model
 from tinytorch.ml.dataset import DataSet
 from tinytorch.ml.optimizers.optimizer import Optimizer
 from tinytorch.ml.losses.loss import Loss
-from tinytorch.autograd.tensor import Tensor
+from tinytorch.autograd.tensor import Tensor, no_grad
+from tinytorch.ndarr.ndarray import NdArray
 from tinytorch.ml.visualizer import TrainingVisualizer
 
 
@@ -121,53 +122,60 @@ class Trainer:
     
     def train_epoch(self, epoch: int) -> float:
         """训练一个 epoch。
-        
+
         Args:
             epoch: 当前 epoch 编号
-        
+
         Returns:
             该 epoch 的平均损失
         """
-        # 设置为训练模式
         self.model.train()
-        
-        # 使用惰性迭代避免一次性加载所有批次到内存
+
         total_loss = 0.0
         num_batches = (len(self.dataset) + self.dataset.batch_size - 1) // self.dataset.batch_size
 
         for batch_idx, (batch_data, batch_labels) in enumerate(self.dataset.iter_batches()):
-            # 转换为 Tensor
-            input_var = Tensor(batch_data, requires_grad=False)
-            target_var = Tensor(batch_labels, requires_grad=False)
-            
-            # 清除梯度
-            self.optimizer.zero_grad()
-            
-            # 前向传播
-            output = self.model(input_var)
-            
-            # 计算损失
-            loss = self.loss_fn(output, target_var)
-            
-            # 反向传播
-            loss.backward()
-            
-            # 更新参数
-            self.optimizer.step()
-            
-            # 累积损失
-            loss_value = loss.value.data[0]
+            loss_value = self._train_step(batch_data, batch_labels)
             total_loss += loss_value
-            
-            # 打印进度
+
             if (batch_idx + 1) % self.print_interval == 0:
-                avg_loss = total_loss / (batch_idx + 1)
-                print(f"  Batch [{batch_idx+1}/{num_batches}] Loss: {avg_loss:.6f}")
-        
-        # 返回平均损失
-        avg_loss = total_loss / num_batches
-        return avg_loss
-    
+                running_avg = total_loss / (batch_idx + 1)
+                print(f"  Batch [{batch_idx+1}/{num_batches}] Loss: {running_avg:.6f}")
+
+        return total_loss / num_batches
+
+    def _compute_batch_loss(self, batch_data: NdArray, batch_labels: NdArray) -> float:
+        """计算单个批次的损失值。
+
+        Args:
+            batch_data: 批次输入数据
+            batch_labels: 批次标签数据
+
+        Returns:
+            该批次的标量损失值
+        """
+        input_tensor = Tensor(batch_data, requires_grad=False)
+        target_tensor = Tensor(batch_labels, requires_grad=False)
+        output = self.model(input_tensor)
+        loss = self.loss_fn(output, target_tensor)
+        return loss
+
+    def _train_step(self, batch_data: NdArray, batch_labels: NdArray) -> float:
+        """执行单个批次的训练步骤：前向 → 损失 → 反向 → 更新。
+
+        Args:
+            batch_data: 批次输入数据
+            batch_labels: 批次标签数据
+
+        Returns:
+            该批次的标量损失值
+        """
+        self.optimizer.zero_grad()
+        loss = self._compute_batch_loss(batch_data, batch_labels)
+        loss.backward()
+        self.optimizer.step()
+        return loss.value.data[0]
+
     def validate(self) -> float:
         """在验证集上验证模型。
         
@@ -176,36 +184,17 @@ class Trainer:
         """
         if self.val_dataset is None:
             raise ValueError("No validation dataset provided")
-        
-        from tinytorch.autograd.tensor import no_grad
-        
-        # 设置为评估模式
+
         self.model.eval()
-        
-        # 获取所有批次
         batches = self.val_dataset.get_batches()
         total_loss = 0.0
-        num_batches = len(batches)
-        
+
         with no_grad():
             for batch_data, batch_labels in batches:
-                # 转换为 Tensor
-                input_var = Tensor(batch_data, requires_grad=False)
-                target_var = Tensor(batch_labels, requires_grad=False)
-                
-                # 前向传播（不需要梯度）
-                output = self.model(input_var)
-                
-                # 计算损失
-                loss = self.loss_fn(output, target_var)
-                
-                # 累积损失
-                loss_value = loss.value.data[0]
-                total_loss += loss_value
-        
-        # 返回平均损失
-        avg_loss = total_loss / num_batches
-        return avg_loss
+                loss = self._compute_batch_loss(batch_data, batch_labels)
+                total_loss += loss.value.data[0]
+
+        return total_loss / len(batches)
     
     def save_checkpoint(self, file_path: str) -> None:
         """保存训练检查点。
@@ -213,19 +202,14 @@ class Trainer:
         Args:
             file_path: 检查点保存路径
         """
-        import pickle
-        
         checkpoint = {
             'model_name': self.model.name,
             'model_state': self.model.module.to_dict(),
             'optimizer_state': self.optimizer.state_dict(),
             'train_losses': self.train_losses,
-            'val_losses': self.val_losses
+            'val_losses': self.val_losses,
         }
-        
-        with open(file_path, 'wb') as f:
-            pickle.dump(checkpoint, f)
-        
+        Model._save_pickle(checkpoint, file_path)
         print(f"检查点已保存至: {file_path}")
     
     def load_checkpoint(self, file_path: str) -> None:
@@ -234,18 +218,10 @@ class Trainer:
         Args:
             file_path: 检查点文件路径
         """
-        import pickle
-        
-        with open(file_path, 'rb') as f:
-            checkpoint = pickle.load(f)
-        
-        # 加载优化器状态
+        checkpoint = Model._load_pickle(file_path)
         self.optimizer.load_state_dict(checkpoint['optimizer_state'])
-        
-        # 加载训练历史
         self.train_losses = checkpoint.get('train_losses', [])
         self.val_losses = checkpoint.get('val_losses', [])
-        
         print(f"检查点已从 {file_path} 加载")
     
     def __repr__(self) -> str:

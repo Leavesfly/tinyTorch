@@ -146,7 +146,12 @@ Desktop.ini
 *.pt
 *.pth
 *.ckpt
+*.pkl
 checkpoints/
 logs/
 runs/
 data/cache/
+
+# Generated files
+training_data.json
+training_report.html

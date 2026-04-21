@@ -5,7 +5,7 @@
 Author: TinyAI Team
 """
 
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 import time
 
 
@@ -26,12 +26,12 @@ class Monitor:
         >>> monitor.print_summary()
     """
     
-    def __init__(self):
+    def __init__(self) -> None:
         """初始化监控器。"""
         self.metrics: Dict[str, List[float]] = {}
         self.history: List[Dict[str, Any]] = []
-        self.start_time = None
-        self.current_epoch = 0
+        self.start_time: Optional[float] = None
+        self.current_epoch: int = 0
     
     def start(self) -> None:
         """开始训练监控。"""
@@ -40,7 +40,7 @@ class Monitor:
         print("训练监控启动")
         print("=" * 60)
     
-    def record(self, metric_name: str, value: float, epoch: int = None) -> None:
+    def record(self, metric_name: str, value: float, epoch: Optional[int] = None) -> None:
         """记录一个指标值。
         
         Args:
@@ -88,7 +88,7 @@ class Monitor:
         """
         return self.metrics.get(metric_name, [])
     
-    def get_latest(self, metric_name: str) -> float:
+    def get_latest(self, metric_name: str) -> Optional[float]:
         """获取某个指标的最新值。
         
         Args:
@@ -100,7 +100,7 @@ class Monitor:
         values = self.metrics.get(metric_name, [])
         return values[-1] if values else None
     
-    def get_best(self, metric_name: str, mode: str = 'min') -> float:
+    def get_best(self, metric_name: str, mode: str = 'min') -> Optional[float]:
         """获取某个指标的最佳值。
         
         Args:
@@ -232,7 +232,7 @@ class EarlyStopping:
         ...         break
     """
     
-    def __init__(self, patience: int = 10, mode: str = 'min', min_delta: float = 0.0):
+    def __init__(self, patience: int = 10, mode: str = 'min', min_delta: float = 0.0) -> None:
         """初始化早停机制。
         
         Args:
@@ -240,13 +240,13 @@ class EarlyStopping:
             mode: 'min' 或 'max'
             min_delta: 最小改善阈值
         """
-        self.patience = patience
-        self.mode = mode
-        self.min_delta = min_delta
+        self.patience: int = patience
+        self.mode: str = mode
+        self.min_delta: float = min_delta
         
-        self.best_score = None
-        self.counter = 0
-        self.should_stop = False
+        self.best_score: Optional[float] = None
+        self.counter: int = 0
+        self.should_stop: bool = False
     
     def step(self, score: float) -> bool:
         """更新早停状态。

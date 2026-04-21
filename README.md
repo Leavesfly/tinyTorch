@@ -168,8 +168,7 @@ assert a.data == b.data
 为了避免 README 和实际导出接口再次脱节，推荐按下面的方式使用：
 
 - 核心数据结构从顶层导入：`from tinytorch import NdArray, Tensor, Function, no_grad`
-- 常见基础层从 `tinytorch.nn` 导入：`Linear`、`ReLU`、`Sequential` 等
-- 高级层从 `tinytorch.nn.layers` 导入：`Conv2d`、`RNN`、`LSTM`、`GRU`、`MultiHeadAttention`
+- 所有神经网络层统一从 `tinytorch.nn` 导入：`Linear`、`ReLU`、`Conv2d`、`LSTM`、`MultiHeadAttention` 等
 - 训练相关从 `tinytorch.ml` 或其子模块导入
 - 数据加载与随机工具从 `tinytorch.utils` 导入
 
@@ -230,7 +229,7 @@ assert a.data == b.data
 - `BCELoss` 期望输入是概率值，不是 logits。
 - `Model.load()` 目前需要先手动构造模型结构，再通过 `module=...` 加载参数。
 - `DataLoader` 目前仅支持单进程；`num_workers > 0` 和 `pin_memory=True` 会抛出 `NotImplementedError`。
-- 顶层 `tinytorch.nn` 没有导出全部高级层；如需卷积、循环层、注意力，请从 `tinytorch.nn.layers` 导入。
+- 模型保存/加载使用 Python pickle 序列化，**切勿加载来自不可信来源的模型文件**（存在任意代码执行风险）。
 
 ## 开发
 

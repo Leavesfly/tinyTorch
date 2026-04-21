@@ -8,7 +8,9 @@ Author: TinyAI Team
 import math
 import pytest
 from tinytorch.nn.layers.conv import Conv2d
-from tinytorch.nn.layers.normalization import Embedding, Dropout, LayerNorm
+from tinytorch.nn.layers.normalization import LayerNorm
+from tinytorch.nn.layers.dropout import Dropout
+from tinytorch.nn.layers.embedding import Embedding
 from tinytorch.nn.layers.attention import MultiHeadAttention
 from tinytorch.autograd import Tensor
 from tinytorch.ndarr import NdArray, Shape

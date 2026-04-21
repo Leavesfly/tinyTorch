@@ -1,11 +1,10 @@
-"""Autograd module - Automatic differentiation engine.
+"""自动微分模块。
 
-This module implements automatic differentiation for building dynamic
-computational graphs and computing gradients.
+本模块实现了自动微分引擎，用于构建动态计算图并计算梯度。
 
-Classes:
-    Tensor: Automatic differentiation variable
-    Function: Function base class for operations
+类:
+    Tensor: 自动微分变量
+    Function: 可微分操作的函数基类
 """
 
 from tinytorch.autograd.tensor import Tensor, no_grad

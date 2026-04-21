@@ -3,6 +3,7 @@
 Author: TinyAI Team
 """
 
+from typing import Optional
 from tinytorch.nn.module import Module
 from tinytorch.nn.layers.linear import Linear
 from tinytorch.autograd import Tensor
@@ -64,8 +65,8 @@ class MultiHeadAttention(Module):
         # 输出投影层
         self.W_o = Linear(embed_dim, embed_dim, use_bias=True)
     
-    def forward(self, query: Tensor, key: Tensor = None, value: Tensor = None,
-                mask: Tensor = None) -> Tensor:
+    def forward(self, query: Tensor, key: Optional[Tensor] = None, value: Optional[Tensor] = None,
+                mask: Optional[Tensor] = None) -> Tensor:
         """前向传播。
         
         Args:
@@ -126,7 +127,7 @@ class MultiHeadAttention(Module):
         return _MergeHeads(self.num_heads, self.head_dim, self.embed_dim)(x)
     
     def _scaled_dot_product_attention(self, Q: Tensor, K: Tensor,
-                                      V: Tensor, mask: Tensor = None) -> Tensor:
+                                      V: Tensor, mask: Optional[Tensor] = None) -> Tensor:
         """缩放点积注意力。
         
         Args:

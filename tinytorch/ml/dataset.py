@@ -70,10 +70,16 @@ class DataSet(Dataset):
         """
         return self.data[index], self.labels[index]
     
+    def _shuffled_indices(self) -> List[int]:
+        """返回一份打乱后的索引副本。"""
+        indices = list(range(len(self.data)))
+        tt_random.shuffle(indices)
+        return indices
+
     def shuffle_data(self) -> None:
         """打乱数据顺序。"""
         tt_random.shuffle(self._indices)
-    
+
     def get_batches(self) -> List[Tuple[NdArray, NdArray]]:
         """获取所有批次。
         
@@ -86,39 +92,53 @@ class DataSet(Dataset):
         """
         return list(self.iter_batches())
     
-    def iter_batches(self) -> Iterator[Tuple[NdArray, NdArray]]:
-        """惰性迭代所有批次（生成器模式）。
-        
-        与 get_batches() 不同，此方法不会一次性创建所有批次，
-        而是按需生成，适合大数据集场景。
-        
+    def _iter_raw_batches(self) -> Iterator[Tuple[List[Any], List[Any]]]:
+        """惰性迭代所有批次的原始列表数据（内部公共方法）。
+
         Yields:
-            (batch_data, batch_labels) 元组
+            (batch_data, batch_labels) 元组，均为原始列表。
         """
-        # 如果需要打乱，先打乱索引
         if self.shuffle:
             self.shuffle_data()
-        
+
         num_samples = len(self.data)
         num_batches = (num_samples + self.batch_size - 1) // self.batch_size
-        
+
         for i in range(num_batches):
             start_idx = i * self.batch_size
             end_idx = min(start_idx + self.batch_size, num_samples)
-            
-            # 获取批次索引
             batch_indices = self._indices[start_idx:end_idx]
-            
-            # 构建批次数据
+
             batch_data = [self.data[idx] for idx in batch_indices]
             batch_labels = [self.labels[idx] for idx in batch_indices]
-            
-            # 转换为 NdArray
-            batch_data_tensor = NdArray(batch_data)
-            batch_labels_tensor = NdArray(batch_labels)
-            
-            yield batch_data_tensor, batch_labels_tensor
+            yield batch_data, batch_labels
+
+    def iter_batches(self) -> Iterator[Tuple[NdArray, NdArray]]:
+        """惰性迭代所有批次，返回 NdArray 格式。
+
+        与 get_batches() 不同，此方法不会一次性创建所有批次，
+        而是按需生成，适合大数据集场景。
+
+        Yields:
+            (batch_data, batch_labels) 元组，均为 NdArray。
+        """
+        for batch_data, batch_labels in self._iter_raw_batches():
+            yield NdArray(batch_data), NdArray(batch_labels)
     
+    def _subset_by_indices(self, indices: List[int], shuffle: bool) -> 'DataSet':
+        """根据索引列表创建子数据集。
+
+        Args:
+            indices: 样本索引列表
+            shuffle: 子数据集是否打乱
+
+        Returns:
+            新的 DataSet 实例
+        """
+        subset_data = [self.data[i] for i in indices]
+        subset_labels = [self.labels[i] for i in indices]
+        return DataSet(subset_data, subset_labels, batch_size=self.batch_size, shuffle=shuffle)
+
     def split(self, ratio: float) -> Tuple['DataSet', 'DataSet']:
         """分割数据集。
         
@@ -130,59 +150,21 @@ class DataSet(Dataset):
         """
         if not 0 < ratio < 1:
             raise ValueError("Ratio must be between 0 and 1")
-        
-        num_samples = len(self.data)
-        split_idx = int(num_samples * ratio)
-        
-        # 先打乱数据
-        indices = list(range(num_samples))
-        tt_random.shuffle(indices)
-        
-        # 分割索引
-        train_indices = indices[:split_idx]
-        val_indices = indices[split_idx:]
-        
-        # 构建训练集和验证集
-        train_data = [self.data[i] for i in train_indices]
-        train_labels = [self.labels[i] for i in train_indices]
-        
-        val_data = [self.data[i] for i in val_indices]
-        val_labels = [self.labels[i] for i in val_indices]
-        
-        train_dataset = DataSet(train_data, train_labels, 
-                               batch_size=self.batch_size, 
-                               shuffle=self.shuffle)
-        val_dataset = DataSet(val_data, val_labels,
-                             batch_size=self.batch_size,
-                             shuffle=False)  # 验证集通常不打乱
-        
+
+        indices = self._shuffled_indices()
+        split_idx = int(len(self.data) * ratio)
+
+        train_dataset = self._subset_by_indices(indices[:split_idx], shuffle=self.shuffle)
+        val_dataset = self._subset_by_indices(indices[split_idx:], shuffle=False)
         return train_dataset, val_dataset
     
     def __iter__(self) -> Iterator[Tuple[List[Any], List[Any]]]:
-        """迭代数据集，产生批次数据。
-        
+        """迭代数据集，产生批次的原始列表数据。
+
         Yields:
-            (batch_data, batch_labels) 元组，其中 batch_data 是列表的列表
+            (batch_data, batch_labels) 元组，均为原始列表。
         """
-        # 如果需要打乱，先打乱索引
-        if self.shuffle:
-            self.shuffle_data()
-        
-        num_samples = len(self.data)
-        num_batches = (num_samples + self.batch_size - 1) // self.batch_size
-        
-        for i in range(num_batches):
-            start_idx = i * self.batch_size
-            end_idx = min(start_idx + self.batch_size, num_samples)
-            
-            # 获取批次索引
-            batch_indices = self._indices[start_idx:end_idx]
-            
-            # 构建批次数据
-            batch_data = [self.data[idx] for idx in batch_indices]
-            batch_labels = [self.labels[idx] for idx in batch_indices]
-            
-            yield batch_data, batch_labels
+        return self._iter_raw_batches()
     
     def __repr__(self) -> str:
         """返回数据集的字符串表示。"""

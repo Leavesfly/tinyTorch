@@ -10,7 +10,7 @@
 from typing import List
 from tinytorch.ndarr import NdArray
 from tinytorch.autograd.function import Function
-
+from tinytorch.autograd.ops.utils import DEFAULT_EPSILON
 
 class Exp(Function):
     """指数函数。
@@ -42,7 +42,6 @@ class Exp(Function):
         y, = self.get_saved_tensors()
         return [grad_output.mul(y)]
 
-
 class Log(Function):
     """自然对数函数。
 
@@ -59,7 +58,7 @@ class Log(Function):
         - 添加小常数 epsilon 保证数值稳定性，避免除零错误
     """
 
-    def __init__(self, epsilon: float = 1e-10):
+    def __init__(self, epsilon: float = DEFAULT_EPSILON):
         """初始化对数函数。
 
         Args:
@@ -82,7 +81,6 @@ class Log(Function):
         x_safe = x.add(self.epsilon)
         return [grad_output.div(x_safe)]
 
-
 class Sqrt(Function):
     """平方根函数。
 
@@ -99,7 +97,7 @@ class Sqrt(Function):
         - 添加小常数 epsilon 保证数值稳定性，避免 x=0 时除零
     """
 
-    def __init__(self, epsilon: float = 1e-10):
+    def __init__(self, epsilon: float = DEFAULT_EPSILON):
         """初始化平方根函数。
 
         Args:
@@ -123,7 +121,6 @@ class Sqrt(Function):
         denom = y.mul(2.0).add(self.epsilon)
         return [grad_output.div(denom)]
 
-
 class Pow(Function):
     """幂函数。
 
@@ -140,7 +137,7 @@ class Pow(Function):
         - 添加小常数 epsilon 保证数值稳定性
     """
 
-    def __init__(self, exponent: float, epsilon: float = 1e-10):
+    def __init__(self, exponent: float, epsilon: float = DEFAULT_EPSILON):
         """初始化幂函数。
 
         Args:

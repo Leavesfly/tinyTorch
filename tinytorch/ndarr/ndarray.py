@@ -18,12 +18,16 @@ _BOX_MULLER_MIN_U1 = 1e-10
 _EXP_OVERFLOW_THRESHOLD = 709.0
 _EXP_UNDERFLOW_THRESHOLD = -745.0
 
+# 数学常量：负无穷和非数字
+_NEG_INF = float('-inf')
+_NAN = float('nan')
+
 
 class NdArray:
     """多维数组类，支持各种运算操作。
     
     NdArray 使用扁平列表存储数据（行优先布局），依赖 Shape 进行维度管理。
-    所有操作都会创建新的 Tensor 对象。
+    所有操作都会创建新的 NdArray 对象。
     
     Attributes:
         data: 存储所有元素的扁平列表
@@ -447,60 +451,87 @@ class NdArray:
         return NdArray(self.data.copy(), reshaped_shape, self.dtype)
     
     # ==================== 归约运算 ====================
-    
-    def sum(self, axis: int = None, keepdims: bool = False) -> 'NdArray':
-        """求和张量元素。
-        
+
+    def _reduce_axis(self, axis: int, keepdims: bool, initial_value,
+                     accumulate_fn) -> 'NdArray':
+        """沿指定轴执行归约运算的通用方法。
+
+        将 axis 校验、新形状计算、索引映射等公共逻辑集中在此处，
+        不同的归约运算只需提供初始值和累积函数即可。
+
         Args:
-            axis: 沿哪个轴求和（None 表示所有）
+            axis: 归约轴（已保证非 None）
             keepdims: 是否保持被缩减的维度
-            
+            initial_value: 结果数组的初始填充值
+            accumulate_fn: 累积函数 (current, new_element) -> updated
+
         Returns:
-            求和结果
+            归约后的 NdArray
         """
-        if axis is None:
-            # 求所有元素的和
-            result = sum(self.data)
-            if keepdims:
-                new_shape = Shape((1,) * self.shape.ndim)
-            else:
-                new_shape = Shape((1,))
-            return NdArray([result], new_shape, self.dtype)
-        
-        # 沿特定轴求和
         if axis < 0:
             axis = self.shape.ndim + axis
         if axis < 0 or axis >= self.shape.ndim:
             raise ValueError(f"axis {axis} out of range for {self.shape.ndim}D ndarr")
-        
-        # 计算新形状
+
         new_dims = list(self.shape.dims)
         if keepdims:
             new_dims[axis] = 1
         else:
             new_dims.pop(axis)
-        
         if not new_dims:
             new_dims = [1]
         new_shape = Shape(tuple(new_dims))
-        
-        # 执行缩减（根据 dtype 选择正确的初始值）
-        result_size = new_shape.size
-        zero_val = 0 if self.dtype == 'int32' else 0.0
-        result_data = [zero_val] * result_size
-        
-        for i in range(self.shape.size):
-            old_indices = self._linear_to_indices(i, self.shape)
+
+        result_data = [initial_value] * new_shape.size
+        for linear_idx in range(self.shape.size):
+            old_indices = self._linear_to_indices(linear_idx, self.shape)
             new_indices = list(old_indices)
             if keepdims:
                 new_indices[axis] = 0
             else:
                 new_indices.pop(axis)
             new_idx = new_shape.linear_index(tuple(new_indices))
-            result_data[new_idx] += self.data[i]
-        
+            result_data[new_idx] = accumulate_fn(result_data[new_idx], self.data[linear_idx])
+
         return NdArray(result_data, new_shape, self.dtype)
-    
+
+    @staticmethod
+    def _reduce_all(data, reduce_fn, keepdims: bool, ndim: int, dtype: str):
+        """对所有元素执行归约的通用方法。
+
+        Args:
+            data: 原始数据列表
+            reduce_fn: 全局归约函数（如 sum / max / min）
+            keepdims: 是否保持维度
+            ndim: 原始张量的维度数
+            dtype: 数据类型
+
+        Returns:
+            归约后的 NdArray
+        """
+        result = reduce_fn(data)
+        if keepdims:
+            new_shape = Shape((1,) * ndim)
+        else:
+            new_shape = Shape((1,))
+        return NdArray([result], new_shape, dtype)
+
+    def sum(self, axis: int = None, keepdims: bool = False) -> 'NdArray':
+        """求和张量元素。
+
+        Args:
+            axis: 沿哪个轴求和（None 表示所有）
+            keepdims: 是否保持被缩减的维度
+
+        Returns:
+            求和结果
+        """
+        if axis is None:
+            return self._reduce_all(self.data, sum, keepdims, self.shape.ndim, self.dtype)
+
+        zero_val = 0 if self.dtype == 'int32' else 0.0
+        return self._reduce_axis(axis, keepdims, zero_val, lambda current, element: current + element)
+
     def mean(self, axis: int = None, keepdims: bool = False) -> 'NdArray':
         """求张量元素的平均值。"""
         sum_tensor = self.sum(axis, keepdims)
@@ -508,103 +539,39 @@ class NdArray:
             count = self.shape.size
         else:
             count = self.shape.dims[axis if axis >= 0 else self.shape.ndim + axis]
-        
+
         result_data = [x / count for x in sum_tensor.data]
         return NdArray(result_data, sum_tensor.shape, self.dtype)
-    
+
     def max(self, axis: int = None, keepdims: bool = False) -> 'NdArray':
         """求张量元素的最大值。
-        
+
         Args:
             axis: 沿哪个轴求最大值（None 表示所有）
             keepdims: 是否保持被缩减的维度
-            
+
         Returns:
             最大值结果
         """
         if axis is None:
-            result = max(self.data)
-            if keepdims:
-                new_shape = Shape((1,) * self.shape.ndim)
-            else:
-                new_shape = Shape((1,))
-            return NdArray([result], new_shape, self.dtype)
-        
-        if axis < 0:
-            axis = self.shape.ndim + axis
-        if axis < 0 or axis >= self.shape.ndim:
-            raise ValueError(f"axis {axis} out of range for {self.shape.ndim}D ndarr")
-        
-        new_dims = list(self.shape.dims)
-        if keepdims:
-            new_dims[axis] = 1
-        else:
-            new_dims.pop(axis)
-        if not new_dims:
-            new_dims = [1]
-        new_shape = Shape(tuple(new_dims))
-        
-        neg_inf = float('-inf')
-        result_data = [neg_inf] * new_shape.size
-        for i in range(self.shape.size):
-            old_indices = self._linear_to_indices(i, self.shape)
-            new_indices = list(old_indices)
-            if keepdims:
-                new_indices[axis] = 0
-            else:
-                new_indices.pop(axis)
-            new_idx = new_shape.linear_index(tuple(new_indices))
-            if self.data[i] > result_data[new_idx]:
-                result_data[new_idx] = self.data[i]
-        
-        return NdArray(result_data, new_shape, self.dtype)
-    
+            return self._reduce_all(self.data, max, keepdims, self.shape.ndim, self.dtype)
+
+        return self._reduce_axis(axis, keepdims, float('-inf'), lambda current, element: max(current, element))
+
     def min(self, axis: int = None, keepdims: bool = False) -> 'NdArray':
         """求张量元素的最小值。
-        
+
         Args:
             axis: 沿哪个轴求最小值（None 表示所有）
             keepdims: 是否保持被缩减的维度
-            
+
         Returns:
             最小值结果
         """
         if axis is None:
-            result = min(self.data)
-            if keepdims:
-                new_shape = Shape((1,) * self.shape.ndim)
-            else:
-                new_shape = Shape((1,))
-            return NdArray([result], new_shape, self.dtype)
-        
-        if axis < 0:
-            axis = self.shape.ndim + axis
-        if axis < 0 or axis >= self.shape.ndim:
-            raise ValueError(f"axis {axis} out of range for {self.shape.ndim}D ndarr")
-        
-        new_dims = list(self.shape.dims)
-        if keepdims:
-            new_dims[axis] = 1
-        else:
-            new_dims.pop(axis)
-        if not new_dims:
-            new_dims = [1]
-        new_shape = Shape(tuple(new_dims))
-        
-        pos_inf = float('inf')
-        result_data = [pos_inf] * new_shape.size
-        for i in range(self.shape.size):
-            old_indices = self._linear_to_indices(i, self.shape)
-            new_indices = list(old_indices)
-            if keepdims:
-                new_indices[axis] = 0
-            else:
-                new_indices.pop(axis)
-            new_idx = new_shape.linear_index(tuple(new_indices))
-            if self.data[i] < result_data[new_idx]:
-                result_data[new_idx] = self.data[i]
-        
-        return NdArray(result_data, new_shape, self.dtype)
+            return self._reduce_all(self.data, min, keepdims, self.shape.ndim, self.dtype)
+
+        return self._reduce_axis(axis, keepdims, float('inf'), lambda current, element: min(current, element))
     
     # ==================== 数学函数 ====================
     
@@ -630,9 +597,9 @@ class NdArray:
             if x > 0:
                 result_data.append(math.log(x))
             elif x == 0:
-                result_data.append(float('-inf'))
+                result_data.append(_NEG_INF)
             else:
-                result_data.append(float('nan'))
+                result_data.append(_NAN)
         return NdArray(result_data, self.shape, self.dtype)
 
     def sqrt(self) -> 'NdArray':
@@ -645,7 +612,7 @@ class NdArray:
             if x >= 0:
                 result_data.append(math.sqrt(x))
             else:
-                result_data.append(float('nan'))
+                result_data.append(_NAN)
         return NdArray(result_data, self.shape, self.dtype)
     
     def pow(self, exponent: float) -> 'NdArray':

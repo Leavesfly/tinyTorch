@@ -3,7 +3,45 @@
 Author: TinyAI Team
 """
 
-from typing import List
+from typing import List, Union
+
+
+def _validate_inputs(predictions: List, targets: List) -> None:
+    """验证预测值和目标值的长度是否一致。
+
+    Args:
+        predictions: 预测值列表
+        targets: 目标值列表
+
+    Raises:
+        ValueError: 当长度不匹配时
+    """
+    if len(predictions) != len(targets):
+        raise ValueError(
+            f"predictions and targets must have same length, "
+            f"got {len(predictions)} and {len(targets)}"
+        )
+
+
+def _to_class_indices(values: List[Union[List[float], float]]) -> List[int]:
+    """将预测值或目标值转换为类别索引列表。
+
+    如果元素是列表/元组（多分类概率/logits），取最大值索引；
+    否则直接转换为整数。
+
+    Args:
+        values: 预测值或目标值列表
+
+    Returns:
+        类别索引列表
+    """
+    result = []
+    for value in values:
+        if isinstance(value, (list, tuple)):
+            result.append(value.index(max(value)))
+        else:
+            result.append(int(value))
+    return result
 
 
 class Evaluator:

@@ -38,17 +38,14 @@ class SGD(Optimizer):
     def __init__(self, params: List[Parameter], learning_rate: float = 0.01,
                  momentum: float = 0.0, weight_decay: float = 0.0, **kwargs):
         """初始化 SGD 优化器。
-        
+
         Args:
             params: 要优化的参数列表
             learning_rate: 学习率（也可用 lr 关键字）
             momentum: 动量系数（0-1之间）
             weight_decay: 权重衰减系数（L2 正则化）
         """
-        # 支持 lr 作为 learning_rate 的别名
-        if 'lr' in kwargs:
-            learning_rate = kwargs.pop('lr')
-        super().__init__(params, learning_rate)
+        super().__init__(params, learning_rate, **kwargs)
         self.momentum = momentum
         self.weight_decay = weight_decay
         

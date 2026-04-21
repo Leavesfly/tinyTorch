@@ -18,13 +18,22 @@ class Loss:
         >>> loss.backward()
     """
     
-    def __init__(self, name: str = None):
+    def __init__(self, name: str = None, reduction: str = 'mean'):
         """初始化损失函数。
-        
+
         Args:
             name: 损失函数名称
+            reduction: 损失聚合方式，可选 'mean'、'sum' 或 'none'
+
+        Raises:
+            ValueError: 当 reduction 不是合法值时
         """
         self.name = name or self.__class__.__name__
+        if reduction not in ('mean', 'sum', 'none'):
+            raise ValueError(
+                f"reduction must be 'mean', 'sum' or 'none', got '{reduction}'"
+            )
+        self.reduction = reduction
     
     def forward(self, pred: Tensor, target: Tensor) -> Tensor:
         """计算损失（抽象方法，子类必须实现）。

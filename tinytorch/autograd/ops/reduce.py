@@ -10,7 +10,7 @@
 from typing import List, Optional
 from tinytorch.ndarr import NdArray
 from tinytorch.autograd.function import Function
-
+from tinytorch.autograd.ops.utils import expand_and_broadcast
 
 class Sum(Function):
     """求和归约运算。
@@ -51,31 +51,8 @@ class Sum(Function):
         return x.sum(axis=self.axis, keepdims=self.keepdims)
 
     def backward(self, grad_output: NdArray) -> List[NdArray]:
-        """反向传播: 计算输入梯度。
-
-        将梯度广播回输入形状。根据 keepdims 参数采取不同策略:
-        - keepdims=True: 直接广播
-        - keepdims=False: 先扩展归约维度再广播
-        """
-        if self.keepdims:
-            # 维度已保留，直接广播
-            return [grad_output._broadcast_to(self.input_shape)]
-
-        if self.axis is None:
-            # 对所有维度归约: 梯度复制到所有位置
-            grad_x = NdArray(
-                [grad_output.data[0]] * self.input_shape.size,
-                self.input_shape, grad_output.dtype
-            )
-            return [grad_x]
-
-        # 对特定轴归约: 扩展维度后广播
-        new_shape_list = list(grad_output.shape.dims)
-        axis = self.axis if self.axis >= 0 else self.input_shape.ndim + self.axis
-        new_shape_list.insert(axis, 1)
-        grad_expanded = grad_output.reshape(tuple(new_shape_list))
-        return [grad_expanded._broadcast_to(self.input_shape)]
-
+        """反向传播: 将梯度广播回输入形状。"""
+        return [expand_and_broadcast(grad_output, self.input_shape, self.axis, self.keepdims)]
 
 class Mean(Function):
     """平均归约运算。
@@ -114,36 +91,15 @@ class Mean(Function):
         """前向传播: 计算平均归约。"""
         self.input_shape = x.shape
 
-        # 计算归约元素数量，用于反向传播时梯度缩放
         if self.axis is None:
             self.count = x.shape.size
         else:
-            axis = self.axis if self.axis >= 0 else x.shape.ndim + self.axis
-            self.count = x.shape.dims[axis]
+            normalized_axis = self.axis if self.axis >= 0 else x.shape.ndim + self.axis
+            self.count = x.shape.dims[normalized_axis]
 
         return x.mean(axis=self.axis, keepdims=self.keepdims)
 
     def backward(self, grad_output: NdArray) -> List[NdArray]:
-        """反向传播: 计算输入梯度。
-
-        梯度除以归约元素数量后广播回输入形状。
-        """
-        # 梯度缩放: 除以归约元素数量
+        """反向传播: 梯度除以归约元素数量后广播回输入形状。"""
         grad_scaled = grad_output.div(self.count)
-
-        # 广播回输入形状 (与 Sum 相同的逻辑)
-        if self.keepdims:
-            return [grad_scaled._broadcast_to(self.input_shape)]
-
-        if self.axis is None:
-            grad_x = NdArray(
-                [grad_scaled.data[0]] * self.input_shape.size,
-                self.input_shape, grad_output.dtype
-            )
-            return [grad_x]
-
-        new_shape_list = list(grad_scaled.shape.dims)
-        axis = self.axis if self.axis >= 0 else self.input_shape.ndim + self.axis
-        new_shape_list.insert(axis, 1)
-        grad_expanded = grad_scaled.reshape(tuple(new_shape_list))
-        return [grad_expanded._broadcast_to(self.input_shape)]
+        return [expand_and_broadcast(grad_scaled, self.input_shape, self.axis, self.keepdims)]

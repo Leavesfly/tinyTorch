@@ -38,15 +38,11 @@ class CrossEntropyLoss(Loss):
         Args:
             reduction: 损失聚合方式，'mean' 或 'sum'
         """
-        super().__init__()
-        self.reduction = reduction
-        
-        if reduction not in ['mean', 'sum', 'none']:
-            raise ValueError(f"reduction must be 'mean', 'sum' or 'none', got {reduction}")
-    
+        super().__init__(reduction=reduction)
+
     def forward(self, input: Tensor, target: Tensor) -> Tensor:
         """计算交叉熵损失。
-        
+
         Args:
             input: 预测 logits，形状 (batch_size, num_classes)
             target: 目标类别索引，形状 (batch_size,)
@@ -86,11 +82,7 @@ class BCELoss(Loss):
         Args:
             reduction: 损失聚合方式
         """
-        super().__init__()
-        self.reduction = reduction
-        
-        if reduction not in ['mean', 'sum', 'none']:
-            raise ValueError(f"reduction must be 'mean', 'sum' or 'none', got {reduction}")
+        super().__init__(reduction=reduction)
     
     def forward(self, input: Tensor, target: Tensor) -> Tensor:
         """计算二元交叉熵损失。

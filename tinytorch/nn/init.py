@@ -128,11 +128,28 @@ def ones_(tensor: NdArray) -> NdArray:
     return constant_(tensor, 1.0)
 
 
+def _init_with_std(tensor: NdArray, std: float, distribution: str) -> NdArray:
+    """根据标准差和分布类型初始化张量。
+
+    Args:
+        tensor: 要初始化的张量
+        std: 标准差
+        distribution: ``'uniform'`` 或 ``'normal'``
+
+    Returns:
+        初始化后的张量（同一个对象）
+    """
+    if distribution == 'uniform':
+        bound = math.sqrt(3.0) * std
+        return uniform_(tensor, -bound, bound)
+    elif distribution == 'normal':
+        return normal_(tensor, 0.0, std)
+    raise ValueError(f"Unknown distribution '{distribution}', expected 'uniform' or 'normal'")
+
 def xavier_uniform_(tensor: NdArray, gain: float = 1.0) -> NdArray:
     """使用 Xavier 均匀分布初始化张量（原地操作）。
     
     也称为 Glorot 初始化。适用于 tanh 和 sigmoid 激活函数。
-    
     公式: U(-a, a), 其中 a = gain * sqrt(6 / (fan_in + fan_out))
     
     Args:
@@ -144,8 +161,7 @@ def xavier_uniform_(tensor: NdArray, gain: float = 1.0) -> NdArray:
     """
     fan_in, fan_out = _calculate_fan_in_and_fan_out(tensor)
     std = gain * math.sqrt(2.0 / (fan_in + fan_out))
-    a = math.sqrt(3.0) * std  # 将标准差转换为均匀分布的边界
-    return uniform_(tensor, -a, a)
+    return _init_with_std(tensor, std, 'uniform')
 
 
 def xavier_normal_(tensor: NdArray, gain: float = 1.0) -> NdArray:
@@ -164,7 +180,7 @@ def xavier_normal_(tensor: NdArray, gain: float = 1.0) -> NdArray:
     """
     fan_in, fan_out = _calculate_fan_in_and_fan_out(tensor)
     std = gain * math.sqrt(2.0 / (fan_in + fan_out))
-    return normal_(tensor, 0.0, std)
+    return _init_with_std(tensor, std, 'normal')
 
 
 def kaiming_uniform_(tensor: NdArray, a: float = 0, mode: str = 'fan_in',
@@ -183,10 +199,8 @@ def kaiming_uniform_(tensor: NdArray, a: float = 0, mode: str = 'fan_in',
         初始化后的张量（同一个对象）
     """
     fan = _calculate_correct_fan(tensor, mode)
-    gain = calculate_gain(nonlinearity)
-    std = gain / math.sqrt(fan)
-    bound = math.sqrt(3.0) * std
-    return uniform_(tensor, -bound, bound)
+    std = calculate_gain(nonlinearity) / math.sqrt(fan)
+    return _init_with_std(tensor, std, 'uniform')
 
 
 def kaiming_normal_(tensor: NdArray, a: float = 0, mode: str = 'fan_in',
@@ -205,9 +219,8 @@ def kaiming_normal_(tensor: NdArray, a: float = 0, mode: str = 'fan_in',
         初始化后的张量（同一个对象）
     """
     fan = _calculate_correct_fan(tensor, mode)
-    gain = calculate_gain(nonlinearity)
-    std = gain / math.sqrt(fan)
-    return normal_(tensor, 0.0, std)
+    std = calculate_gain(nonlinearity) / math.sqrt(fan)
+    return _init_with_std(tensor, std, 'normal')
 
 
 def _calculate_fan_in_and_fan_out(tensor: NdArray) -> 'Tuple[int, int]':

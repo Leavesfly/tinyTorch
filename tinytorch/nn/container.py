@@ -5,22 +5,9 @@
 Author: TinyAI Team
 """
 
-from typing import List, Union, Iterator
+from typing import List, Optional, Iterator
 from tinytorch.nn.module import Module
 from tinytorch.autograd.tensor import Tensor
-
-
-def _indent_repr(repr_str: str, indent: str = '  ') -> str:
-    """对多行字符串表示进行缩进。
-    
-    Args:
-        repr_str: 要缩进的字符串表示
-        indent: 缩进字符串，默认为两个空格
-    
-    Returns:
-        缩进后的字符串
-    """
-    return '\n'.join(indent + line for line in repr_str.split('\n'))
 
 
 class Sequential(Module):
@@ -44,7 +31,7 @@ class Sequential(Module):
         (32, 5)
     """
     
-    def __init__(self, *layers: Module, name: str = None):
+    def __init__(self, *layers: Module, name: Optional[str] = None):
         """初始化顺序容器。
         
         Args:
@@ -58,7 +45,7 @@ class Sequential(Module):
         for idx, layer in enumerate(layers):
             self.add(layer, name=f'layer_{idx}')
     
-    def add(self, module: Module, name: str = None) -> 'Sequential':
+    def add(self, module: Module, name: Optional[str] = None) -> 'Sequential':
         """添加一个模块到容器末尾。
         
         Args:
@@ -75,7 +62,7 @@ class Sequential(Module):
         if name is None:
             idx = len(self._layers)
             name = f'layer_{idx}'
-            while name in self._child_modules:
+            while name in self._modules:
                 idx += 1
                 name = f'layer_{idx}'
 
@@ -129,22 +116,8 @@ class Sequential(Module):
     
     def __repr__(self) -> str:
         """返回容器的字符串表示。"""
-        # 构建层列表
-        lines = []
-        for idx, module in enumerate(self._layers):
-            mod_str = repr(module)
-            # 对多行表示进行缩进
-            mod_str = _indent_repr(mod_str)
-            lines.append(f"({idx}): {mod_str}")
-        
-        # 构建最终表示
-        main_str = f"{self.__class__.__name__}(\n"
-        if lines:
-            main_str += '\n'.join(lines)
-            main_str += '\n'
-        main_str += ')'
-        
-        return main_str
+        children = ((str(idx), module) for idx, module in enumerate(self._layers))
+        return self._format_child_modules(children, self.__class__.__name__)
 
 
 class ModuleList(Module):
@@ -162,7 +135,7 @@ class ModuleList(Module):
         >>> # 需要在 forward 中手动定义如何使用这些层
     """
     
-    def __init__(self, modules: List[Module] = None, name: str = None):
+    def __init__(self, modules: Optional[List[Module]] = None, name: Optional[str] = None):
         """初始化模块列表。
         
         Args:
@@ -219,16 +192,5 @@ class ModuleList(Module):
     
     def __repr__(self) -> str:
         """返回模块列表的字符串表示。"""
-        lines = []
-        for idx, module in enumerate(self._modules_list):
-            mod_str = repr(module)
-            mod_str = _indent_repr(mod_str)
-            lines.append(f"({idx}): {mod_str}")
-        
-        main_str = f"{self.__class__.__name__}(\n"
-        if lines:
-            main_str += '\n'.join(lines)
-            main_str += '\n'
-        main_str += ')'
-        
-        return main_str
+        children = ((str(idx), module) for idx, module in enumerate(self._modules_list))
+        return self._format_child_modules(children, self.__class__.__name__)

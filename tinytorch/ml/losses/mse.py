@@ -35,10 +35,7 @@ class MSELoss(Loss):
         Args:
             reduction: 损失聚合方式，'mean'、'sum' 或 'none'
         """
-        super().__init__()
-        if reduction not in ['mean', 'sum', 'none']:
-            raise ValueError(f"reduction must be 'mean', 'sum' or 'none', got {reduction}")
-        self.reduction = reduction
+        super().__init__(reduction=reduction)
     
     def forward(self, pred: Tensor, target: Tensor) -> Tensor:
         """计算均方误差损失。
