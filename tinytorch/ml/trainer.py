@@ -5,7 +5,9 @@
 Author: TinyAI Team
 """
 
+import logging
 from typing import Optional
+
 from tinytorch.ml.model import Model
 from tinytorch.ml.dataset import DataSet
 from tinytorch.ml.optimizers.optimizer import Optimizer
@@ -13,6 +15,8 @@ from tinytorch.ml.losses.loss import Loss
 from tinytorch.autograd.tensor import Tensor, no_grad
 from tinytorch.ndarr.ndarray import NdArray
 from tinytorch.ml.visualizer import TrainingVisualizer
+
+logger = logging.getLogger(__name__)
 
 
 class Trainer:
@@ -86,39 +90,46 @@ class Trainer:
     
     def train(self) -> None:
         """执行完整的训练循环。"""
-        print(f"开始训练模型: {self.model.name}")
-        print(f"训练样本数: {len(self.dataset)}, 批次大小: {self.dataset.batch_size}")
-        print(f"训练轮次: {self.max_epochs}")
-        print("-" * 60)
-        
+        logger.info("开始训练模型: %s", self.model.name)
+        logger.info(
+            "训练样本数: %d, 批次大小: %d",
+            len(self.dataset), self.dataset.batch_size,
+        )
+        logger.info("训练轮次: %d", self.max_epochs)
+        logger.info("-" * 60)
+
         if self.visualizer:
             self.visualizer.begin_training()
-        
+
         for epoch in range(self.max_epochs):
             # 训练一个 epoch
             epoch_loss = self.train_epoch(epoch)
             self.train_losses.append(epoch_loss)
-            
+
             # 验证
             val_loss = None
             if self.val_dataset is not None:
                 val_loss = self.validate()
                 self.val_losses.append(val_loss)
-                print(f"Epoch [{epoch+1}/{self.max_epochs}] "
-                      f"Train Loss: {epoch_loss:.6f}, Val Loss: {val_loss:.6f}")
+                logger.info(
+                    "Epoch [%d/%d] Train Loss: %.6f, Val Loss: %.6f",
+                    epoch + 1, self.max_epochs, epoch_loss, val_loss,
+                )
             else:
-                print(f"Epoch [{epoch+1}/{self.max_epochs}] "
-                      f"Train Loss: {epoch_loss:.6f}")
-            
+                logger.info(
+                    "Epoch [%d/%d] Train Loss: %.6f",
+                    epoch + 1, self.max_epochs, epoch_loss,
+                )
+
             # 推送数据到可视化器
             if self.visualizer:
                 self.visualizer.record_epoch(epoch, train_loss=epoch_loss, val_loss=val_loss)
-        
+
         if self.visualizer:
             self.visualizer.finalize()
-        
-        print("-" * 60)
-        print("训练完成!")
+
+        logger.info("-" * 60)
+        logger.info("训练完成!")
     
     def train_epoch(self, epoch: int) -> float:
         """训练一个 epoch。
@@ -140,7 +151,10 @@ class Trainer:
 
             if (batch_idx + 1) % self.print_interval == 0:
                 running_avg = total_loss / (batch_idx + 1)
-                print(f"  Batch [{batch_idx+1}/{num_batches}] Loss: {running_avg:.6f}")
+                logger.info(
+                    "  Batch [%d/%d] Loss: %.6f",
+                    batch_idx + 1, num_batches, running_avg,
+                )
 
         return total_loss / num_batches
 
@@ -210,7 +224,7 @@ class Trainer:
             'val_losses': self.val_losses,
         }
         Model._save_pickle(checkpoint, file_path)
-        print(f"检查点已保存至: {file_path}")
+        logger.info("检查点已保存至: %s", file_path)
     
     def load_checkpoint(self, file_path: str) -> None:
         """加载训练检查点。
@@ -222,7 +236,7 @@ class Trainer:
         self.optimizer.load_state_dict(checkpoint['optimizer_state'])
         self.train_losses = checkpoint.get('train_losses', [])
         self.val_losses = checkpoint.get('val_losses', [])
-        print(f"检查点已从 {file_path} 加载")
+        logger.info("检查点已从 %s 加载", file_path)
     
     def __repr__(self) -> str:
         """返回训练器的字符串表示。"""

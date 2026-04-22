@@ -20,6 +20,8 @@ Python: 3.7+
     >>> from tinytorch.ml import Model, Trainer
 """
 
+import logging as _logging
+
 try:
     from importlib.metadata import version as _pkg_version
     __version__ = _pkg_version('tinytorch')
@@ -28,12 +30,17 @@ except Exception:
 
 __author__ = 'TinyAI Team'
 
+# 遵循 Python 库的 logging 最佳实践：为顶层 logger 挂一个 NullHandler，
+# 在用户未配置日志时静默，避免 "No handlers could be found" 警告。
+_logging.getLogger(__name__).addHandler(_logging.NullHandler())
+
 # 导入核心模块
 from tinytorch import ndarr
 from tinytorch import autograd
 from tinytorch import nn
 from tinytorch import ml
 from tinytorch import utils
+from tinytorch import constants
 
 # 方便导入常用类
 from tinytorch.ndarr import NdArray, Shape
@@ -45,6 +52,7 @@ __all__ = [
     'nn',
     'ml',
     'utils',
+    'constants',
     '__version__',
     '__author__',
     'NdArray',

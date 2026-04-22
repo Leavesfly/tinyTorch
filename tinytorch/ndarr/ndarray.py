@@ -8,17 +8,16 @@ Version: 0.1.0
 
 import math
 from typing import Union, List, Tuple, Any, Callable
+
+from tinytorch.constants import (
+    BOX_MULLER_MIN_U1 as _BOX_MULLER_MIN_U1,
+    EXP_OVERFLOW_THRESHOLD as _EXP_OVERFLOW_THRESHOLD,
+    EXP_UNDERFLOW_THRESHOLD as _EXP_UNDERFLOW_THRESHOLD,
+)
 from tinytorch.ndarr.shape import Shape
 from tinytorch.utils import random as tt_random
 
-# Box-Muller 变换中 u1 的最小阈值，防止 math.log(0) 产生 -inf
-_BOX_MULLER_MIN_U1 = 1e-10
-
-# math.exp 的安全阈值：超过此范围会溢出或下溢
-_EXP_OVERFLOW_THRESHOLD = 709.0
-_EXP_UNDERFLOW_THRESHOLD = -745.0
-
-# 数学常量：负无穷和非数字
+# 数学常量：负无穷和非数字（仅本模块内部使用）
 _NEG_INF = float('-inf')
 _NAN = float('nan')
 
@@ -735,8 +734,12 @@ class NdArray:
         return NdArray(self.data.copy(), self.shape, self.dtype)
     
     def __repr__(self) -> str:
-        """字符串表示。"""
-        return f"NdArray(shape={self.shape}, dtype={self.dtype}, data={self.data[:10]}...)" if len(self.data) > 10 else f"NdArray(shape={self.shape}, dtype={self.dtype}, data={self.data})"
+        """字符串表示（数据超过 10 个元素时截断显示）。"""
+        if len(self.data) > 10:
+            data_str = f"{self.data[:10]}..."
+        else:
+            data_str = f"{self.data}"
+        return f"NdArray(shape={self.shape}, dtype={self.dtype}, data={data_str})"
     
     def __str__(self) -> str:
         """字符串表示。"""
@@ -784,7 +787,18 @@ class NdArray:
 
     def __rtruediv__(self, other):
         """反向除法运算符，支持 scalar / NdArray。"""
-        if isinstance(other, (int, float)):
-            result_data = [other / x if x != 0 else float('inf') if other > 0 else float('-inf') if other < 0 else float('nan') for x in self.data]
-            return NdArray(result_data, self.shape, self.dtype)
-        return NotImplemented
+        if not isinstance(other, (int, float)):
+            return NotImplemented
+
+        def _safe_div(x: float) -> float:
+            """对单个元素做 other / x，按符号返回 ±inf 或 nan。"""
+            if x != 0:
+                return other / x
+            if other > 0:
+                return float('inf')
+            if other < 0:
+                return float('-inf')
+            return float('nan')
+
+        result_data = [_safe_div(x) for x in self.data]
+        return NdArray(result_data, self.shape, self.dtype)

@@ -4,13 +4,20 @@
     - sum_to_shape: 梯度归约至目标形状 (处理广播)
     - broadcast_backward: 二元运算的广播梯度归约
     - expand_and_broadcast: 归约运算的梯度广播回原始形状
-    - DEFAULT_EPSILON: 数值稳定性默认常量
+    - DEFAULT_EPSILON: 数值稳定性默认常量（re-export 自 tinytorch.constants）
 """
 
 from typing import Optional
+
+from tinytorch.constants import DEFAULT_EPSILON
 from tinytorch.ndarr import NdArray
 
-DEFAULT_EPSILON: float = 1e-10
+__all__ = [
+    "DEFAULT_EPSILON",
+    "sum_to_shape",
+    "broadcast_backward",
+    "expand_and_broadcast",
+]
 
 def sum_to_shape(tensor: NdArray, target_shape) -> NdArray:
     """将张量求和归约至目标形状。
