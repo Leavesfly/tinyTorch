@@ -40,6 +40,12 @@
   - 优化器：`SGD`、`Adam`
   - 损失函数：`MSELoss`、`CrossEntropyLoss`、`BCELoss`
   - 训练辅助：`Monitor`、`EarlyStopping`、评估器
+- `tinytorch.rl`
+  - 离散空间：`Discrete`
+  - 教学环境：`GridWorldEnv`
+  - 经验回放：`ReplayBuffer`、`Transition`
+  - 强化学习算法：`QLearningAgent`、`DQNAgent`、`DoubleDQNAgent`
+  - 深度强化学习算法：`PolicyGradientAgent`（REINFORCE）、`ActorCriticAgent`、`PPOAgent`
 - `tinytorch.utils`
   - `Dataset` / `IterableDataset` / `DataLoader`
   - `Sampler` / `BatchSampler`
@@ -53,6 +59,7 @@ tinyTorch
 ├── tinytorch.autograd   # Tensor、Function、动态计算图、反向传播
 ├── tinytorch.nn         # Module/Parameter 以及常见神经网络层
 ├── tinytorch.ml         # 训练循环、优化器、损失函数、模型保存加载
+├── tinytorch.rl         # 强化学习环境、经验回放、Q-learning、DQN
 └── tinytorch.utils      # DataLoader、Sampler、随机数工具
 ```
 
@@ -163,6 +170,20 @@ b = NdArray.randn((2, 2))
 assert a.data == b.data
 ```
 
+### 5. 训练一个 GridWorld 强化学习智能体
+
+```python
+from tinytorch.rl import GridWorldEnv, QLearningAgent
+
+env = GridWorldEnv(width=4, height=4, start=(0, 0), goal=(3, 3))
+agent = QLearningAgent(action_size=env.action_space.n, learning_rate=0.3, gamma=0.95)
+
+for _ in range(100):
+    total_reward, steps = agent.train_episode(env)
+
+print(agent.q_values(env.start))
+```
+
 ## 导入建议
 
 为了避免 README 和实际导出接口再次脱节，推荐按下面的方式使用：
@@ -170,6 +191,7 @@ assert a.data == b.data
 - 核心数据结构从顶层导入：`from tinytorch import NdArray, Tensor, Function, no_grad`
 - 所有神经网络层统一从 `tinytorch.nn` 导入：`Linear`、`ReLU`、`Conv2d`、`LSTM`、`MultiHeadAttention` 等
 - 训练相关从 `tinytorch.ml` 或其子模块导入
+- 强化学习相关从 `tinytorch.rl` 导入
 - 数据加载与随机工具从 `tinytorch.utils` 导入
 
 ## 模块概览
@@ -196,6 +218,20 @@ assert a.data == b.data
 - `SGD` / `Adam`
 - `MSELoss` / `CrossEntropyLoss` / `BCELoss`
 
+### `tinytorch.rl`
+
+提供轻量强化学习组件，适合教学演示和小规模算法验证：
+
+- `GridWorldEnv`：简化 Gym 风格的二维网格环境
+- `Discrete`：离散动作/观测空间
+- `ReplayBuffer` / `Transition`：DQN 常用经验回放
+- `QLearningAgent`：表格 Q-learning
+- `DQNAgent`：复用 `tinytorch.nn.Module`、优化器和 `MSELoss` 的简化 DQN
+- `DoubleDQNAgent`：使用在线网络选动作、目标网络估值，缓解 DQN 过估计
+- `PolicyGradientAgent`：REINFORCE 策略梯度
+- `ActorCriticAgent`：优势 Actor-Critic
+- `PPOAgent`：面向离散动作空间的简化 PPO
+
 ### `tinytorch.utils`
 
 提供两类实用工具：
@@ -218,6 +254,7 @@ assert a.data == b.data
 - `examples/cnn/mnist_classifier.py`
 - `examples/nlp/language_model.py`
 - `examples/transformer/simple_transformer.py`
+- `examples/rl/gridworld_q_learning.py`
 - `examples/deepseek/deepseek_v3_demo.py`
 
 ## 当前限制与注意事项
@@ -229,6 +266,7 @@ assert a.data == b.data
 - `BCELoss` 期望输入是概率值，不是 logits。
 - `Model.load()` 目前需要先手动构造模型结构，再通过 `module=...` 加载参数。
 - `DataLoader` 目前仅支持单进程；`num_workers > 0` 和 `pin_memory=True` 会抛出 `NotImplementedError`。
+- `tinytorch.rl` 当前聚焦离散动作空间和教学型小环境，PPO/Actor-Critic 实现偏教学化，尚未覆盖连续控制、并行环境采样、GAE 或高性能 replay。
 - 模型保存/加载使用 Python pickle 序列化，**切勿加载来自不可信来源的模型文件**（存在任意代码执行风险）。
 
 ## 开发

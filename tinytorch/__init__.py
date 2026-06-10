@@ -13,6 +13,7 @@ Python: 3.7+
     nn: 神经网络层和模块
     ml: 机器学习训练框架
     utils: 工具函数
+    rl: 强化学习组件
 
 示例：
     >>> from tinytorch import NdArray, Tensor
@@ -40,6 +41,7 @@ from tinytorch import autograd
 from tinytorch import nn
 from tinytorch import ml
 from tinytorch import utils
+from tinytorch import rl
 from tinytorch import constants
 
 # 方便导入常用类
@@ -52,6 +54,7 @@ __all__ = [
     'nn',
     'ml',
     'utils',
+    'rl',
     'constants',
     '__version__',
     '__author__',
