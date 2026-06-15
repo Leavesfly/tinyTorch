@@ -41,9 +41,9 @@
   - 损失函数：`MSELoss`、`CrossEntropyLoss`、`BCELoss`
   - 训练辅助：`Monitor`、`EarlyStopping`、评估器
 - `tinytorch.rl`
-  - 离散空间：`Discrete`
-  - 教学环境：`GridWorldEnv`
-  - 经验回放：`ReplayBuffer`、`Transition`
+  - 空间定义：`Discrete`、`Box`、`MultiDiscrete`
+  - 环境接口：`Env`、`GridWorldEnv`、`VectorEnv`
+  - 经验与轨迹：`ReplayBuffer`、`PrioritizedReplayBuffer`、`RolloutBuffer`、`Transition`
   - 强化学习算法：`QLearningAgent`、`DQNAgent`、`DoubleDQNAgent`
   - 深度强化学习算法：`PolicyGradientAgent`（REINFORCE）、`ActorCriticAgent`、`PPOAgent`
 - `tinytorch.utils`
@@ -223,14 +223,20 @@ print(agent.q_values(env.start))
 提供轻量强化学习组件，适合教学演示和小规模算法验证：
 
 - `GridWorldEnv`：简化 Gym 风格的二维网格环境
-- `Discrete`：离散动作/观测空间
-- `ReplayBuffer` / `Transition`：DQN 常用经验回放
+- `Env` / `VectorEnv`：环境基类与顺序向量环境
+- `Discrete` / `Box` / `MultiDiscrete`：离散、连续向量、多离散空间
+- `ReplayBuffer` / `PrioritizedReplayBuffer` / `Transition`：DQN 常用经验回放与优先级回放
+- `RolloutBuffer`：on-policy 轨迹缓存，支持 discounted return 与 GAE advantage
 - `QLearningAgent`：表格 Q-learning
 - `DQNAgent`：复用 `tinytorch.nn.Module`、优化器和 `MSELoss` 的简化 DQN
 - `DoubleDQNAgent`：使用在线网络选动作、目标网络估值，缓解 DQN 过估计
 - `PolicyGradientAgent`：REINFORCE 策略梯度
 - `ActorCriticAgent`：优势 Actor-Critic
 - `PPOAgent`：面向离散动作空间的简化 PPO
+
+其中 `DQNAgent` 支持一步环境交互训练、target network 硬/软更新，并能与
+`PrioritizedReplayBuffer` 配合更新样本优先级；`ActorCriticAgent` 和
+`PPOAgent` 可直接消费 `RolloutBuffer`，便于复用采样器和 GAE 结果。
 
 ### `tinytorch.utils`
 
@@ -266,7 +272,7 @@ print(agent.q_values(env.start))
 - `BCELoss` 期望输入是概率值，不是 logits。
 - `Model.load()` 目前需要先手动构造模型结构，再通过 `module=...` 加载参数。
 - `DataLoader` 目前仅支持单进程；`num_workers > 0` 和 `pin_memory=True` 会抛出 `NotImplementedError`。
-- `tinytorch.rl` 当前聚焦离散动作空间和教学型小环境，PPO/Actor-Critic 实现偏教学化，尚未覆盖连续控制、并行环境采样、GAE 或高性能 replay。
+- `tinytorch.rl` 已提供连续观测空间、优先级回放、顺序向量环境和 GAE，但当前策略算法仍聚焦离散动作空间；PPO/Actor-Critic 实现偏教学化，尚未覆盖连续控制策略分布、多进程采样或高性能 replay。
 - 模型保存/加载使用 Python pickle 序列化，**切勿加载来自不可信来源的模型文件**（存在任意代码执行风险）。
 
 ## 开发

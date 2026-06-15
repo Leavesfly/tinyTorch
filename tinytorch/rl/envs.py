@@ -3,7 +3,7 @@
 这些环境遵循简化版 Gym 风格接口：``reset()`` 和 ``step(action)``。
 """
 
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 from tinytorch.rl.spaces import Discrete
 
@@ -11,7 +11,53 @@ from tinytorch.rl.spaces import Discrete
 GridState = Tuple[int, int]
 
 
-class GridWorldEnv:
+class Env:
+    """强化学习环境基类。"""
+
+    action_space = None
+    observation_space = None
+
+    def reset(self):
+        """重置环境并返回初始观测。"""
+        raise NotImplementedError
+
+    def step(self, action):
+        """执行一步环境转移，返回 ``(obs, reward, done, info)``。"""
+        raise NotImplementedError
+
+    def render(self) -> str:
+        """返回环境的可读表示。"""
+        return repr(self)
+
+
+class VectorEnv:
+    """顺序向量环境。
+
+    该实现不引入多进程，只是在一个对象中管理多个环境实例，便于教学和小规模采样。
+    """
+
+    def __init__(self, env_fns: Sequence[Callable[[], Env]]):
+        if not env_fns:
+            raise ValueError("VectorEnv requires at least one environment factory")
+        self.envs = [env_fn() for env_fn in env_fns]
+        self.num_envs = len(self.envs)
+        self.action_space = self.envs[0].action_space
+        self.observation_space = self.envs[0].observation_space
+
+    def reset(self) -> List[object]:
+        """重置所有环境。"""
+        return [env.reset() for env in self.envs]
+
+    def step(self, actions: Sequence[object]):
+        """对所有环境各执行一步。"""
+        if len(actions) != self.num_envs:
+            raise ValueError("actions length must match number of environments")
+        results = [env.step(action) for env, action in zip(self.envs, actions)]
+        observations, rewards, dones, infos = zip(*results)
+        return list(observations), list(rewards), list(dones), list(infos)
+
+
+class GridWorldEnv(Env):
     """二维网格世界环境。
 
     动作定义：

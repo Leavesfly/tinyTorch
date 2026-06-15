@@ -11,7 +11,7 @@
 
 ```python
 from tinytorch import NdArray, Shape, Tensor, Function, no_grad
-from tinytorch import ndarr, autograd, nn, ml, utils, constants
+from tinytorch import ndarr, autograd, nn, ml, rl, utils, constants
 ```
 
 | 名称 | 类型 | 说明 |
@@ -461,7 +461,42 @@ TrainingVisualizer(port=8097, auto_open=True)
 
 > ⚠️ 这些常量被框架代码标注为**内部实现细节**，不要在业务代码中依赖它们的具体值。
 
-## 9.8 异常速查
+## 9.8 `tinytorch.rl`
+
+### 9.8.1 空间与环境
+
+| API | 说明 |
+|-----|------|
+| `Discrete(n)` | 离散空间，取值为 `0 ~ n-1` |
+| `Box(low, high, shape)` | 一维连续向量空间 |
+| `MultiDiscrete(nvec)` | 多离散空间 |
+| `Env` | 环境基类，约定 `reset()` / `step(action)` |
+| `VectorEnv(env_fns)` | 顺序管理多个环境实例 |
+| `GridWorldEnv(width=4, height=4, start=(0, 0), goal=None, obstacles=None, step_reward=-0.01, goal_reward=1.0, wall_reward=-0.1, max_steps=None)` | 内置二维网格世界 |
+
+### 9.8.2 经验与轨迹
+
+| API | 说明 |
+|-----|------|
+| `Transition(state, action, reward, next_state, done)` | 单步交互样本 |
+| `ReplayBuffer(capacity=10000)` | 固定容量经验回放 |
+| `PrioritizedReplayBuffer(capacity=10000, alpha=0.6, beta=0.4, epsilon=1e-6)` | 优先级经验回放 |
+| `RolloutBuffer()` | on-policy 轨迹缓存，支持 return / GAE |
+
+### 9.8.3 Agent
+
+| API | 说明 |
+|-----|------|
+| `QLearningAgent(action_size, learning_rate=0.1, gamma=0.99, epsilon=0.1, epsilon_min=0.01, epsilon_decay=1.0)` | 表格 Q-learning |
+| `DQNAgent(q_network, optimizer, state_dim, action_size, gamma=0.99, epsilon=0.1, epsilon_min=0.01, epsilon_decay=1.0, replay_buffer=None, target_network=None, batch_size=32)` | 深度 Q 网络 |
+| `DoubleDQNAgent(...)` | Double DQN，签名同 `DQNAgent` |
+| `PolicyGradientAgent(policy_network, optimizer, state_dim, action_size, gamma=0.99, normalize_returns=True)` | REINFORCE |
+| `ActorCriticAgent(policy_network, value_network, policy_optimizer, value_optimizer, state_dim, action_size, gamma=0.99, normalize_advantages=True)` | Advantage Actor-Critic |
+| `PPOAgent(policy_network, value_network, policy_optimizer, value_optimizer, state_dim, action_size, gamma=0.99, clip_epsilon=0.2, normalize_advantages=True)` | 简化 PPO |
+
+更多说明见 [12 · 强化学习（rl）模块](./12-强化学习rl模块.md)。
+
+## 9.9 异常速查
 
 | 抛出位置 | 异常类型 | 典型触发条件 |
 |----------|----------|--------------|
@@ -489,7 +524,7 @@ TrainingVisualizer(port=8097, auto_open=True)
 | `Optimizer.step` | `NotImplementedError` | 基类直接调用 |
 | `Function.forward / backward` | `NotImplementedError` | 子类未实现 |
 
-## 9.9 常用导入清单
+## 9.10 常用导入清单
 
 ```python
 # 核心数值 / 自动微分
@@ -518,6 +553,13 @@ from tinytorch.ml import (
 # 数据加载
 from tinytorch.utils import Dataset, IterableDataset, DataLoader, default_collate
 from tinytorch.utils import random as tt_random
+
+# 强化学习
+from tinytorch.rl import (
+    GridWorldEnv, VectorEnv,
+    ReplayBuffer, PrioritizedReplayBuffer, RolloutBuffer,
+    QLearningAgent, DQNAgent, DoubleDQNAgent, PPOAgent,
+)
 
 # 计算图可视化
 from tinytorch.autograd import export_graph_html, visualize_graph

@@ -8,7 +8,7 @@ from tinytorch.ml.losses import CrossEntropyLoss, MSELoss
 from tinytorch.ml.optimizers import Optimizer
 from tinytorch.ndarr import NdArray
 from tinytorch.nn import Module
-from tinytorch.rl.replay import ReplayBuffer, Transition
+from tinytorch.rl.replay import PrioritizedSample, ReplayBuffer, RolloutBuffer, Transition
 from tinytorch.utils import random as tt_random
 
 
@@ -216,13 +216,18 @@ class DQNAgent:
             return None
 
         batch_size = min(self.batch_size, len(self.replay_buffer))
-        batch = self.replay_buffer.sample(batch_size)
+        sample = self.replay_buffer.sample(batch_size)
+        if isinstance(sample, PrioritizedSample):
+            batch = sample.transitions
+        else:
+            batch = sample
         states = self._flatten_states([item.state for item in batch])
         inputs = Tensor(NdArray(states, (batch_size, self.state_dim)), requires_grad=False)
 
         self.optimizer.zero_grad()
         predictions = self.q_network(inputs)
         targets = list(predictions.value.data)
+        td_errors = []
 
         for row, item in enumerate(batch):
             if not 0 <= item.action < self.action_size:
@@ -230,6 +235,8 @@ class DQNAgent:
             target_value = item.reward
             if not item.done:
                 target_value += self.gamma * self._bootstrap_value(item.next_state)
+            current_value = predictions.value.data[row * self.action_size + item.action]
+            td_errors.append(target_value - current_value)
             targets[row * self.action_size + item.action] = target_value
 
         target_tensor = Tensor(NdArray(targets, (batch_size, self.action_size)), requires_grad=False)
@@ -237,14 +244,47 @@ class DQNAgent:
         loss_value = loss.value.data[0]
         loss.backward()
         self.optimizer.step()
+        if isinstance(sample, PrioritizedSample):
+            self.replay_buffer.update_priorities(sample.indices, td_errors)
         self._decay_epsilon()
         return loss_value
+
+    def train_step(self, env, state=None, state_encoder=None) -> Tuple[object, float, bool, Optional[float]]:
+        """与环境交互一步、写入 replay，并尝试学习一次。
+
+        Args:
+            env: 兼容 ``reset``/``step`` 的环境
+            state: 当前环境状态；为 None 时自动调用 ``env.reset()``
+            state_encoder: 可选状态编码函数，输出长度为 ``state_dim`` 的向量
+        """
+        if state is None:
+            state = env.reset()
+
+        encoded_state = self._encode_env_state(env, state, state_encoder)
+        action = self.select_action(encoded_state, training=True)
+        next_state, reward, done, _ = env.step(action)
+        encoded_next_state = self._encode_env_state(env, next_state, state_encoder)
+        self.remember(encoded_state, action, reward, encoded_next_state, done)
+        loss = self.learn()
+        return next_state, reward, done, loss
 
     def sync_target_network(self) -> None:
         """将在线 Q 网络参数同步到 target network。"""
         if self.target_network is None:
             raise ValueError("target_network is not configured")
         self.target_network.load_state_dict(self.q_network.state_dict())
+
+    def soft_update_target_network(self, tau: float = 0.005) -> None:
+        """以 Polyak averaging 方式软更新 target network。"""
+        if self.target_network is None:
+            raise ValueError("target_network is not configured")
+        if not 0.0 <= tau <= 1.0:
+            raise ValueError("tau must be in [0, 1]")
+
+        online_params = dict(self.q_network.named_parameters())
+        for name, target_param in self.target_network.named_parameters():
+            source = online_params[name].value
+            target_param.value = source.mul(tau).add(target_param.value.mul(1.0 - tau))
 
     def _predict_next_q_values(self, state: Sequence[float]) -> List[float]:
         network = self.target_network if self.target_network is not None else self.q_network
@@ -269,6 +309,13 @@ class DQNAgent:
         for state in states:
             flat.extend(self._as_state_list(state))
         return flat
+
+    def _encode_env_state(self, env, state, state_encoder) -> List[float]:
+        if state_encoder is not None:
+            return self._as_state_list(state_encoder(state))
+        if hasattr(env, "state_vector"):
+            return self._as_state_list(env.state_vector(state))
+        return self._as_state_list(state)
 
     def _decay_epsilon(self) -> None:
         self.epsilon = max(self.epsilon_min, self.epsilon * self.epsilon_decay)
@@ -441,6 +488,38 @@ class ActorCriticAgent(PolicyGradientAgent):
 
         return {"policy_loss": policy_loss_value, "value_loss": value_loss_value}
 
+    def learn_rollout(self, rollout: RolloutBuffer) -> Optional[Dict[str, float]]:
+        """直接使用 RolloutBuffer 中的 return/advantage 更新。"""
+        if len(rollout) == 0:
+            return None
+        if len(rollout.returns) != len(rollout) or len(rollout.advantages) != len(rollout):
+            rollout.compute_returns_and_advantages(gamma=self.gamma, normalize_advantages=self.normalize_advantages)
+
+        self.optimizer.zero_grad()
+        policy_loss = None
+        for step, advantage in zip(rollout.steps, rollout.advantages):
+            logits = self._policy_logits(step.state, track_grad=True)
+            loss = self._weighted_action_loss(logits, step.action, advantage)
+            policy_loss = loss if policy_loss is None else policy_loss + loss
+        policy_loss = policy_loss / len(rollout)
+        policy_loss_value = policy_loss.value.data[0]
+        policy_loss.backward()
+        self.optimizer.step()
+
+        self.value_optimizer.zero_grad()
+        value_loss = None
+        for step, ret in zip(rollout.steps, rollout.returns):
+            prediction = self._value_prediction(step.state, track_grad=True)
+            target = Tensor(NdArray([ret], (1, 1)), requires_grad=False)
+            loss = self.value_loss_fn(prediction, target)
+            value_loss = loss if value_loss is None else value_loss + loss
+        value_loss = value_loss / len(rollout)
+        value_loss_value = value_loss.value.data[0]
+        value_loss.backward()
+        self.value_optimizer.step()
+
+        return {"policy_loss": policy_loss_value, "value_loss": value_loss_value}
+
     def _value_prediction(self, state: Sequence[float], track_grad: bool) -> Tensor:
         state_values = self._as_state_list(state)
         tensor = Tensor(NdArray(state_values, (1, self.state_dim)), requires_grad=False)
@@ -528,6 +607,55 @@ class PPOAgent(ActorCriticAgent):
             loss = self.value_loss_fn(prediction, target)
             value_loss = loss if value_loss is None else value_loss + loss
         value_loss = value_loss / len(trajectory)
+        value_loss_value = value_loss.value.data[0]
+        value_loss.backward()
+        self.value_optimizer.step()
+
+        return {"policy_loss": policy_loss_value, "value_loss": value_loss_value}
+
+    def learn_rollout(self, rollout: RolloutBuffer) -> Optional[Dict[str, float]]:
+        """使用 RolloutBuffer 中的 GAE 和旧策略概率执行 PPO 更新。"""
+        if len(rollout) == 0:
+            return None
+        if len(rollout.returns) != len(rollout) or len(rollout.advantages) != len(rollout):
+            rollout.compute_returns_and_advantages(gamma=self.gamma, normalize_advantages=self.normalize_advantages)
+        return self._learn_with_targets(rollout.steps, rollout.returns, rollout.advantages, rollout.action_probs())
+
+    def _learn_with_targets(
+        self,
+        steps,
+        returns: Sequence[float],
+        advantages: Sequence[float],
+        old_action_probs: Sequence[float],
+    ) -> Dict[str, float]:
+        self.optimizer.zero_grad()
+        policy_loss = None
+        for step, old_prob, advantage in zip(steps, old_action_probs, advantages):
+            if old_prob <= 0:
+                raise ValueError("old_action_probs must be positive")
+            new_prob = self.action_probs(step.state)[step.action]
+            ratio = new_prob / old_prob
+            clipped_ratio = min(max(ratio, 1.0 - self.clip_epsilon), 1.0 + self.clip_epsilon)
+            if advantage >= 0:
+                weight = min(ratio * advantage, clipped_ratio * advantage)
+            else:
+                weight = max(ratio * advantage, clipped_ratio * advantage)
+            logits = self._policy_logits(step.state, track_grad=True)
+            loss = self._weighted_action_loss(logits, step.action, weight)
+            policy_loss = loss if policy_loss is None else policy_loss + loss
+        policy_loss = policy_loss / len(steps)
+        policy_loss_value = policy_loss.value.data[0]
+        policy_loss.backward()
+        self.optimizer.step()
+
+        self.value_optimizer.zero_grad()
+        value_loss = None
+        for step, ret in zip(steps, returns):
+            prediction = self._value_prediction(step.state, track_grad=True)
+            target = Tensor(NdArray([ret], (1, 1)), requires_grad=False)
+            loss = self.value_loss_fn(prediction, target)
+            value_loss = loss if value_loss is None else value_loss + loss
+        value_loss = value_loss / len(steps)
         value_loss_value = value_loss.value.data[0]
         value_loss.backward()
         self.value_optimizer.step()

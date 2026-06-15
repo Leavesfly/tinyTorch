@@ -5,9 +5,9 @@
 """
 
 from tinytorch.rl.agents import ActorCriticAgent, DQNAgent, DoubleDQNAgent, PolicyGradientAgent, PPOAgent, QLearningAgent
-from tinytorch.rl.envs import GridWorldEnv
-from tinytorch.rl.replay import ReplayBuffer, Transition
-from tinytorch.rl.spaces import Discrete
+from tinytorch.rl.envs import Env, GridWorldEnv, VectorEnv
+from tinytorch.rl.replay import PrioritizedReplayBuffer, PrioritizedSample, ReplayBuffer, RolloutBuffer, RolloutStep, Transition
+from tinytorch.rl.spaces import Box, Discrete, MultiDiscrete, Space
 
 __all__ = [
     "DQNAgent",
@@ -16,8 +16,17 @@ __all__ = [
     "ActorCriticAgent",
     "PPOAgent",
     "QLearningAgent",
+    "Env",
     "GridWorldEnv",
+    "VectorEnv",
     "ReplayBuffer",
+    "PrioritizedReplayBuffer",
+    "PrioritizedSample",
+    "RolloutBuffer",
+    "RolloutStep",
     "Transition",
+    "Space",
     "Discrete",
+    "Box",
+    "MultiDiscrete",
 ]

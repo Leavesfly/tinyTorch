@@ -19,6 +19,7 @@
 | 09 | [API 参考文档](./09-API参考文档.md) | 核心公共 API 的签名、参数与返回值速查 |
 | 10 | [常见问题解答 (FAQ)](./10-常见问题解答FAQ.md) | 使用过程中高频问题的排查与解决方案 |
 | 11 | [贡献指南](./11-贡献指南.md) | 开发流程、代码规范、测试要求与 PR 流程 |
+| 12 | [强化学习 (rl) 模块](./12-强化学习rl模块.md) | 环境、空间、回放、轨迹缓存与主流深度强化学习算法 |
 
 ## 🚀 快速入门三步走
 
@@ -46,6 +47,12 @@
 03 架构设计  →  06/07 对应模块  →  11 贡献指南
 ```
 
+### 强化学习路径（环境交互与策略优化）
+
+```
+01 项目概述  →  06 nn  →  07 ml  →  12 rl  →  examples/rl
+```
+
 ## 🧭 项目结构速览
 
 ```text
@@ -57,9 +64,10 @@ tinyTorch/
 │   ├── ml/              # 训练框架（model / trainer / dataset /
 │   │                    #           optimizers / losses / evaluators /
 │   │                    #           monitor / visualizer）
+│   ├── rl/              # 强化学习（spaces / envs / replay / agents）
 │   ├── utils/           # DataLoader、Sampler、随机数工具
 │   └── constants.py     # 数值稳定性常量（epsilon、exp 溢出阈值等）
-├── examples/            # 可运行示例（basic/cnn/nlp/transformer/deepseek/visualization）
+├── examples/            # 可运行示例（basic/cnn/nlp/transformer/deepseek/visualization/rl）
 ├── docs/                # 教程与技术方案
 │   ├── tutorials/       #   入门教程（quickstart / tensor / autograd）
 │   └── 方案.md          #   技术方案文档
