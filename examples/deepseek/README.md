@@ -4,7 +4,133 @@
 
 ## 文件说明
 
-- `deepseek_v3_demo.py` - DeepSeek V3 完整示例，包含 MoE 架构实现和训练流程
+- `deepseek_v3_demo.py` - DeepSeek V3 完整架构示例（MLA + MoE + RoPE + RMSNorm）
+- `deepseek_v3_train.py` - **预训练**单阶段示例（next-token prediction + 负载均衡）
+- `deepseek_v3_pipeline.py` - **完整训练 Pipeline**：行业主流的四阶段流水线
+  （预训练 → SFT → 奖励建模 → RLHF/DPO 对齐）
+- `deepseek_v3_inference.py` - **推理引擎**：KV Cache + 采样策略 + 连续批处理
+  （把训练好的模型真正高效地用起来）
+
+## 完整大模型训练 Pipeline（deepseek_v3_pipeline.py）
+
+`deepseek_v3_train.py` 只覆盖了 **预训练** 一个阶段。工业界训练一个可对话、
+可对齐的大模型，是一条多阶段流水线。`deepseek_v3_pipeline.py` 在同一个
+DeepSeek V3 架构上补齐了现在行业主流的完整训练链路：
+
+```
+Stage 1  预训练 Pre-training
+   海量无标注文本做 next-token prediction
+   L = CE(next-token) + α · L_balance
+   └→ Base Model（有语言知识，但不会"听指令"）
+                    │
+                    ▼
+Stage 2  监督微调 SFT (Supervised Fine-Tuning)
+   (instruction, response) 数据，prompt 部分 mask，只在 response 算损失
+   L = CE(response only)
+   └→ SFT Model（会对话、会遵循指令）
+                    │
+                    ▼
+Stage 3  奖励建模 RM (Reward Modeling)
+   人类偏好对 (chosen ≻ rejected)，pairwise ranking loss
+   L = -log σ(r_chosen - r_rejected)
+   └→ Reward Model（能给回答质量打分）
+                    │
+                    ▼
+Stage 4  偏好对齐 Alignment
+   路线 A：RLHF / PPO —— 用 RM 当奖励、ref 模型做 KL 锚点，策略梯度优化
+           maximize  E[ RM(x,y) - β·KL(π‖π_ref) ]
+   路线 B：DPO —— 跳过 RM，直接用偏好数据对比式优化（更稳更省）
+           L = -log σ(β·[Δlogπ_chosen - Δlogπ_rejected])
+   └→ Aligned Model（输出更符合人类偏好、更安全）
+```
+
+### 运行完整 Pipeline
+
+```bash
+cd tinyTorch
+PYTHONPATH=. python examples/deepseek/deepseek_v3_pipeline.py
+```
+
+### 示例输出（指令遵循准确率随阶段提升）
+
+```
+指令遵循准确率变化（同一套评测集）：
+  预训练 Base   :  50.0%   （只会建模语言，不懂指令）
+  SFT          :  91.7%   （学会遵循指令）
+  DPO 对齐      :  91.7%   （偏好对齐，倾向高质量回答）
+  RLHF/PPO 对齐 :  75.0%   （RM 奖励 + KL 约束优化）
+```
+
+> 现实工程中还会穿插：数据清洗去重、长上下文扩展（YaRN）、课程式数据配比、
+> 安全对齐（红队 / 宪法 AI）、评测回归（MMLU / MT-Bench），以及推理优化
+> （量化 / KV 缓存 / 投机解码）。本示例聚焦**训练主链路**。
+
+## 推理引擎（`tinytorch.inference`）
+
+训练只解决了"模型权重"，要把模型高效用起来，还需要**推理引擎**。
+推理能力已沉淀为 tinyTorch 基础模块：
+
+```python
+from tinytorch.inference import InferenceEngine, SamplingParams
+
+engine = InferenceEngine(model)  # 自动从模型结构推断 KV Cache 配置
+result = engine.generate([1, 2, 3], SamplingParams(max_tokens=10))
+```
+
+`examples/deepseek/deepseek_v3_inference.py` 演示如何在 DeepSeek V3 上使用该模块。
+
+| 机制 | 作用 |
+|------|------|
+| **KV Cache** | 缓存历史 K/V，增量解码把 O(n²) 降到 O(n)；DeepSeek **MLA 只缓存压缩 latent c_KV**，显存再省 ~64× |
+| **采样策略** | greedy / temperature / top-k / top-p(nucleus) / 重复惩罚，控制确定性与多样性 |
+| **停止条件** | EOS token / max_tokens |
+| **性能指标** | TTFT（首 token 延迟）、TPOT（每 token 时间）、吞吐量 tokens/s |
+| **连续批处理** | token 级调度：完成即出队、空位即补入新请求，榨干 GPU 利用率 |
+
+### 运行推理引擎
+
+```bash
+cd tinyTorch
+PYTHONPATH=. python examples/deepseek/deepseek_v3_inference.py
+```
+
+### 示例输出（连续批处理调度过程）
+
+```
+提交 5 条请求，max_batch_size = 2
+（短请求先完成立即返回，长请求继续，空槽补入新请求）
+
+  [step  1] 运行中: 2 │ 等待: 3 │ 已完成: 0
+  [step  3] 运行中: 1 │ 等待: 3 │ 已完成: 1   ← 短请求完成，空出槽位
+  [step  4] 运行中: 2 │ 等待: 2 │ 已完成: 1   ← 立即补入等待请求
+  ...
+  [step 10] 运行中: 0 │ 等待: 0 │ 已完成: 5
+```
+
+> 生产推理引擎还有：PagedAttention（KV 显存分页）、投机解码
+> （Speculative Decoding）、Prefix Caching（共享前缀复用）、张量/流水线并行、
+> 量化（INT8/FP8）等。本示例聚焦核心数据流与工程结构。
+
+## 大模型全生命周期一览
+
+```
+                  ┌─────────────────────────────────────────┐
+   架构设计  ───→ │  deepseek_v3_demo.py                     │
+   (MLA/MoE)      │  MLA + MoE + RoPE + RMSNorm 核心架构      │
+                  └─────────────────────────────────────────┘
+                                    │
+                  ┌─────────────────────────────────────────┐
+   训练      ───→ │  deepseek_v3_train.py（仅预训练）         │
+                  │  deepseek_v3_pipeline.py（完整四阶段）    │
+                  │  预训练 → SFT → 奖励建模 → RLHF/DPO       │
+                  └─────────────────────────────────────────┘
+                                    │
+                  ┌─────────────────────────────────────────┐
+   推理部署  ───→ │  tinytorch.inference（基础模块）            │
+                  │  deepseek_v3_inference.py（DeepSeek 演示）  │
+                  │  KV Cache + 采样 + 连续批处理             │
+                  └─────────────────────────────────────────┘
+```
 
 ## DeepSeek V3 简介
 

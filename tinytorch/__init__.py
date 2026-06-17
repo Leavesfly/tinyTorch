@@ -12,6 +12,7 @@ Python: 3.7+
     autograd: 自动微分引擎
     nn: 神经网络层和模块
     ml: 机器学习训练框架
+    inference: 自回归推理引擎（KV Cache、采样、连续批处理）
     utils: 工具函数
     rl: 强化学习组件
 
@@ -40,6 +41,7 @@ from tinytorch import ndarr
 from tinytorch import autograd
 from tinytorch import nn
 from tinytorch import ml
+from tinytorch import inference
 from tinytorch import utils
 from tinytorch import rl
 from tinytorch import constants
@@ -53,6 +55,7 @@ __all__ = [
     'autograd',
     'nn',
     'ml',
+    'inference',
     'utils',
     'rl',
     'constants',
